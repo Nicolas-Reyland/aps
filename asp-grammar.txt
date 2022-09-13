@@ -1,0 +1,39 @@
+/* Grammar of ASP Language */
+
+// new line
+NL				:=		'\n'
+// operator
+OP				:=		[+-*/.@^]
+// function name
+FN_NAME			:=		[a-z_][a-z_0-9]*
+// definition symbol
+DEF 			:=		'::'
+// function definition symbol
+FN_DEF_SYMBOL	:=		'->'
+// atom symbol
+ATOM_SYMBOL		:=		[A-Z]
+// special symbol
+SPECIAL_SYMBOL	:=		[0-9]
+// equal
+EQU				:=		'='
+
+// definition
+DEFINITION		:=		(BRACE_DEF | FN_DEF | K_DEF) NL
+// brace-definables
+BRACE_DEF		:=		(OP | '_') DEF '{' PROPERTY_LIST '}'
+// function definition
+FN_DEF			:=		FN_NAME DEF ATOM_FORM FN_DEF_SYMBOL ATOM_FORM
+// K definition
+K_DEF			:=		'K' DEF (('?'? [A-Z] [0-9]*) | '?')
+
+// atom
+ATOM			:=		ATOM_SYMBOL | SPECIAL_SYMBOL | ('(' ATOM_FORM ')')
+// ATOM_FORM
+ATOM_FORM		:=		ATOM (OP ATOM)*
+
+// property list
+PROPERTY_LIST	:=		(PROPERTY NL)*
+// property
+PROPERTY		:=		ATOM_FORM EQU (ATOM_FORM | GEN_FORM)+
+// generator form
+GEN_FORM		:=		'$' (OP | ATOM)* '$' ('#' ATOM_SYMBOL)?
