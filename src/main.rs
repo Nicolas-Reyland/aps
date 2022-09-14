@@ -66,9 +66,11 @@ fn test() {
 }
 
 fn main() {
+    /*
     let mut line_parser = nom::bytes::complete::take_until("\n");
     let mut parser = nom::multi::separated_list0(
         nom::bytes::complete::tag("\n"),
         line_parser
     );
+    */
 }
