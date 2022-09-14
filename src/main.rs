@@ -1,4 +1,9 @@
-use nom::{Err, IResult, Parser};
+use nom::{
+    Err,
+    IResult,
+    Parser,
+    bytes::complete::{tag}
+};
 
 fn parse_hello(input: &str) -> IResult<&str, &str, ()> {
     match input.strip_prefix("Hello") {
@@ -45,6 +50,17 @@ fn parse_separated<'i>(
     }
 }
 
+fn atom_symbol_parser<'i : 't, 't>(char: &'t str) -> impl Parser<&'i str, &'i str, ()> {
+    let chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    move |input: &'i str| {
+        if chars.contains(input.chars().next().unwrap()) {
+            Ok((&input[1..], &input[..1]))
+        } else {
+            Err(nom::Err::Error(()))
+        }
+    }
+}
+
 #[test]
 fn test() {
     /*assert_eq!(
@@ -66,11 +82,30 @@ fn test() {
 }
 
 fn main() {
-    /*
-    let mut line_parser = nom::bytes::complete::take_until("\n");
-    let mut parser = nom::multi::separated_list0(
-        nom::bytes::complete::tag("\n"),
-        line_parser
+    let input: &'static str = "+ :: {\n    A + B = B + A\n}\n";
+    // NL := '\n'
+    let mut nl_parser = tag("\n");
+    // OP := [+-*/.@^]
+    let mut op_parser = nom::branch::alt(
+        (tag("+"), tag("-"), tag("*"), tag("/"), tag("."), tag("@"), tag("^"))
     );
-    */
+    // FN_NAME := [a-z_][a-z_0-9]*
+
+    // DEF := '::'
+    let mut def_parser = tag("::");
+    // FN_DEF_SYMBOL := '->'
+    let fn_def_symbol_parser = tag("->");
+    // ATOM_SYMBOL := [A-Z]
+    // atom_symbol_parser
+    // SPECIAL_SYMBOL := [0-9]
+    // let mut special_synmbol = nom::character::is_digit
+    // EQU
+    let equ_parser = tag("=");
+    
+    // definition
+    let definition_parser = 
+
+
+
+
 }
