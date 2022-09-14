@@ -24,7 +24,7 @@ BRACE_DEF		:=		(OP | '_') DEF '{' PROPERTY_LIST '}'
 // function definition
 FN_DEF			:=		FN_NAME DEF ATOM_FORM FN_DEF_SYMBOL ATOM_FORM
 // K definition
-K_DEF			:=		'K' DEF (('?'? [A-Z] [0-9]*) | '?')
+K_DEF			:=		'K' DEF '?'? K_GROUP?
 
 // atom
 ATOM			:=		ATOM_SYMBOL | SPECIAL_SYMBOL | ('(' ATOM_FORM ')')
@@ -37,3 +37,6 @@ PROPERTY_LIST	:=		(PROPERTY NL)*
 PROPERTY		:=		ATOM_FORM EQU (ATOM_FORM | GEN_FORM)+
 // generator form
 GEN_FORM		:=		'$' (OP | ATOM)* '$' ('#' ATOM_SYMBOL)?
+
+// K Group
+K_GROUP         :=      [A-Z] [0-9]*

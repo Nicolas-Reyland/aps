@@ -2,7 +2,9 @@ use nom::{
     Err,
     IResult,
     Parser,
-    bytes::complete::{tag}
+    bytes::complete::{tag},
+    combinator::opt,
+    sequence::tuple,
 };
 
 fn parse_hello(input: &str) -> IResult<&str, &str, ()> {
@@ -96,16 +98,94 @@ fn main() {
     // FN_DEF_SYMBOL := '->'
     let fn_def_symbol_parser = tag("->");
     // ATOM_SYMBOL := [A-Z]
-    // atom_symbol_parser
+    let atom_symbol_parser;
     // SPECIAL_SYMBOL := [0-9]
-    // let mut special_synmbol = nom::character::is_digit
+    let special_synmbol; // = nom::character::is_digit
     // EQU
     let equ_parser = tag("=");
-    
+
     // definition
-    let definition_parser = 
+    let brace_def_parser;
+    let fn_def_parser;
+    let k_def_parser;
+    let definition_parser = tuple(
+        (nom::branch::alt((brace_def_parser, fn_def_parser, k_def_parser)), nl_parser)
+    );
+    // brace definitions
+    let property_list_parser;
+    brace_def_parser = tuple(
+        (
+            nom::branch::alt((op_parser, tag("_"))),
+            def_parser,
+            tag("{"),
+            property_list_parser,
+            tag("}"),
+        )
+    );
+    // function definition
+    let fn_name_parser;
+    let atom_form_parser;
+    fn_def_parser = tuple(
+        (fn_name_parser, def_parser, atom_form_parser, fn_def_symbol_parser, atom_form_parser)
+    );
+    // K definition
+    let k_group_parser;
+    k_def_parser = tuple(
+        (tag("K"), def_parser, opt(tag("?")), opt(k_group_parser))
+    );
 
+    // atom
+    let atom_parser = nom::branch::alt(
+        (
+            atom_symbol_parser,
+            special_synmbol,
+            tuple(
+                (tag("("), atom_form_parser, tag(")"))
+            )
+        )
+    );
+    // atom form
+    atom_form_parser = tuple((
+        atom_parser,
+        nom::multi::many0(
+            tuple((
+                op_parser, atom_parser
+            ))
+        )
+    ));
 
-
-
+    // property list
+    let property_parser;
+    property_list_parser = nom::multi::many0(
+        tuple((
+            property_parser,
+            nl_parser
+        ))
+    );
+    // property
+    let gen_form_parser;
+    property_parser = tuple((
+        atom_form_parser,
+        equ_parser,
+        nom::multi::many1((
+            nom::branch::alt((
+                atom_form_parser, gen_form_parser
+            ))
+        ))
+    ));
+    // gen form
+    gen_form_parser = tuple((
+        tag("$"),
+        nom::multi::many0(
+            nom::branch::alt((
+                op_parser, atom_parser
+            ))
+        ),
+        tag("$"),
+        opt(
+            tuple((
+                tag("#"), atom_symbol_parser
+            ))
+        )
+    ));
 }
