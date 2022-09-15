@@ -1,88 +1,90 @@
-use std::str;
+/* Parser for ASP Lang */
 
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, tag, take_while},
-    character::{complete::{alphanumeric1 as alphanumeric, char, one_of, satisfy}, is_alphabetic, is_digit},
-    combinator::{cut, map, opt, value, recognize},
-    error::{context, convert_error, ContextError, ErrorKind, ParseError, VerboseError},
-    multi::{separated_list0, many0, separated_list1},
-    number::complete::double,
-    sequence::{delimited, preceded, separated_pair, terminated, tuple},
-    Err, IResult, Parser,
+    bytes::complete::{tag, take_while},
+    character::{complete::{char, one_of, satisfy}},
+    combinator::{map, opt, value, recognize},
+    error::{context, ContextError, ErrorKind, ParseError},
+    multi::{many0, fold_many0},
+    sequence::{preceded, terminated, tuple}, IResult,
 };
 
-#[derive(Debug, PartialEq)]
-enum Atom<'a> {
-    Parenthesized(AtomExpr<'a>),
+#[derive(Debug, PartialEq, Clone)]
+enum Atom {
+    Parenthesized(AtomExpr),
     Value(char),
     Special(char),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 struct Operator {
     op: char,
 }
 
-#[derive(Debug, PartialEq)]
-struct AtomExpr<'af> {
+#[derive(Debug, PartialEq, Clone)]
+struct AtomExpr {
     // e.g. A + (B + C)
-    atoms: Vec<Atom<'af>>,
+    atoms: Vec<Atom>,
     operators: Vec<Operator>,
 }
 
-#[derive(Debug, PartialEq)]
-struct AlgebraicProperty<'ap> {
-    atom_expr_left: AtomExpr<'ap>,
-    atom_expr_right: AtomExpr<'ap>,
+#[derive(Debug, PartialEq, Clone)]
+struct AlgebraicProperty {
+    atom_expr_left: AtomExpr,
+    atom_expr_right: AtomExpr,
     // equality: Equality<'ap>
 }
 
 #[derive(Debug, PartialEq)]
-struct AlgebraicFunction<'f> {
-    name: &'f str,
-    atom_expr_left: AtomExpr<'f>,
-    atom_expr_right: AtomExpr<'f>,
+struct AlgebraicFunction<'af> {
+    name: &'af str,
+    atom_expr_left: AtomExpr,
+    atom_expr_right: AtomExpr,
 }
 
 #[derive(Debug, PartialEq)]
 struct KProperty {
     undefined_property: bool,
     base: char,
+    dim: i8,
 }
 
 #[derive(Debug, PartialEq)]
 enum AlgebraicObject<'ao> {
     KProperty(KProperty),
     Function(AlgebraicFunction<'ao>),
-    Property(AlgebraicProperty<'ao>),
+    Property(AlgebraicProperty),
 }
 
+macro_rules! sp_preceded {
+    ($parser:expr) => {
+        preceded(sp_p, $parser)
+    };
+}
+
+macro_rules! sp_terminated {
+    ($parser:expr) => {
+        terminated($parser, sp_p)
+    };
+}
 
 fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     let chars = " \t\r\n";
     take_while(move |c| chars.contains(c))(input)
 }
 
-fn sp_preceded_p<'i, E: ParseError<&'i str>>(parser: impl Parser<&'i str, &'i str, E>) {
-    preceded(sp_p, parser)
-}
-
-fn sp_terminated_p<'i, E: ParseError<&'i str>>(parser: impl Parser<&'i str, &'i str, E>) {
-    terminated(parser, sp_p)
-}
-
 fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
     let chars = "+-*/.@^";
     map(
-        sp_terminated_p(one_of(chars)),
+        sp_terminated!(one_of(chars)),
         |atom_symbol| Operator {op: atom_symbol}
     )(input)
 }
 
 fn fn_name_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     recognize(
-        sp_terminated_p(
+        sp_terminated!(
             tuple((
                 satisfy(|c| c == '_' || c.is_lowercase()),
                 many0(
@@ -94,55 +96,55 @@ fn fn_name_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i
 }
 
 fn def_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
-    sp_terminated_p(tag("::"))(input)
+    sp_terminated!(tag("::"))(input)
 }
 
 fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
-    sp_terminated_p(tag("->"))(input)
+    sp_terminated!(tag("->"))(input)
 }
 
-fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom<'i>, E> {
+fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
-        sp_terminated_p(
+        sp_terminated!(
             satisfy(|c| c.is_alphabetic() && c.is_uppercase())
         ),
         |atom_symbol| Atom::Value(atom_symbol)
     )(input)
 }
 
-fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom<'i>, E> {
+fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
-        sp_terminated_p(
-            satisfy(is_digit)
+        sp_terminated!(
+            satisfy(|c: char| c.is_numeric())
         ),
-        |atom_symbol| Atom::Value(atom_symbol)
+        |atom_symbol| Atom::Special(atom_symbol)
     )(input)
 }
 
 fn equ_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
-    sp_terminated_p(recognize(char('=')))(input)
+    sp_terminated!(recognize(char('=')))(input)
 }
 
 fn end_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
-    sp_terminated_p(tag(";;"))(input)
+    sp_terminated!(tag(";;"))(input)
 }
 
 
-fn definition_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
+fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
     context(
         "definition",
         terminated(
             alt((
-                map(brace_def_p, |properties| properties.iter().map(|property| AlgebraicObject::Property(property)).collect()),
+                map(brace_def_p, |properties| properties.iter().map(|property| AlgebraicObject::Property(property.clone())).collect()),
                 map(fn_def_p, |fn_def| vec![AlgebraicObject::Function(fn_def)]),
                 map(k_def_p, |k_def| vec![AlgebraicObject::KProperty(k_def)]),
             )),
             sp_p
         )
-    ).parse(input)
+    )(input)
 }
 
-fn brace_def_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicProperty>, E> {
+fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicProperty>, E> {
     context(
         "brace def",
         map(
@@ -154,17 +156,17 @@ fn brace_def_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, V
                         |op| Operator { op }
                     )
                 )),
-                sp_preceded_p(def_p),
+                sp_preceded!(def_p),
                 char('{'),
                 property_list_p,
                 char('}'),
             )),
-            |_op, _, _, properties, _| properties
+            |(_op, _, _, properties, _)| properties
         )
     )(input)
 }
 
-fn fn_def_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicFunction, E> {
+fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicFunction<'i>, E> {
     context(
         "fn def",
         map(
@@ -176,39 +178,50 @@ fn fn_def_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Alge
                 atom_expr_p,
                 end_p,
             )),
-            |name, _, atom_expr_left, _, atom_expr_right, _| AlgebraicFunction { name, atom_expr_left, atom_expr_right }
+            |(name, _, atom_expr_left, _, atom_expr_right, _)| AlgebraicFunction { name, atom_expr_left, atom_expr_right }
         )
     )(input)
 }
 
-fn k_def_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, KProperty, E> {
+fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, KProperty, E> {
     context(
         "K def",
         map(
             tuple((
                 char('K'),
                 def_p,
-                alt(char('?')),
-                alt(k_group_p),
+                opt(value(true, char('?'))),
+                opt(k_group_p),
             )),
-            |(), (), c, group| ()
+            |(_, _, c, group)| {
+                let undefined_property = match c {
+                    Some(v) => v, // should be true
+                    None => false
+                };
+                match group {
+                    Some((base, dim)) => KProperty {
+                        undefined_property,
+                        base,
+                        dim,
+                    },
+                    None => KProperty {
+                        undefined_property,
+                        base: 'K',
+                        dim: 1,
+                    }
+                }
+            }
         )
     )(input)
 }
 
 
-fn atom_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom<'i>, E> {
+fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "atom",
         alt((
-            map(
-                atom_symbol_p,
-                |symbol| Atom::Value(symbol)
-            ),
-            map(
-                special_symbol_p,
-                |symbol| Atom::Special(symbol)
-            ),
+            atom_symbol_p,
+            special_symbol_p,
             map(
                 preceded(
                     char('('),
@@ -223,14 +236,14 @@ fn atom_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom<'
     )(input)
 }
 
-fn atom_expr_map_f<'ae>((first, rest): (Atom, Vec<(Operator, Atom)>)) -> AtomExpr<'ae> {
+fn atom_expr_map_f<'ae>((first, rest): (Atom, Vec<(Operator, Atom)>)) -> AtomExpr {
     let num_operators = rest.len();
     let num_atoms = num_operators + 1;
-    let atoms: Vec<Atom> = Vec::with_capacity(num_atoms);
-    let operators: Vec<Operator> = Vec::with_capacity(num_operators);
+    let mut atoms: Vec<Atom> = Vec::with_capacity(num_atoms);
+    let mut operators: Vec<Operator> = Vec::with_capacity(num_operators);
     // fill the atoms & operator vectors
     atoms.push(first);
-    for (atom, op) in rest {
+    for (op, atom) in rest {
         atoms.push(atom);
         operators.push(op);
     }
@@ -238,7 +251,7 @@ fn atom_expr_map_f<'ae>((first, rest): (Atom, Vec<(Operator, Atom)>)) -> AtomExp
     AtomExpr { atoms, operators }
 }
 
-fn atom_expr_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, AtomExpr<'i>, E> {
+fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AtomExpr, E> {
     context(
         "atom expr",
         map(
@@ -254,7 +267,7 @@ fn atom_expr_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, A
     )(input)
 }
 
-fn property_list_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicProperty>, E> {
+fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicProperty>, E> {
     context(
         "property list",
         many0(
@@ -263,7 +276,7 @@ fn property_list_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i st
     )(input)
 }
 
-fn property_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicProperty<'i>, E> {
+fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicProperty, E> {
     context(
         "property",
         map(
@@ -273,42 +286,51 @@ fn property_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Al
                 atom_expr_p,
                 end_p,
             )),
-            |atom_expr_left, _, atom_expr_right, _| AlgebraicProperty { atom_expr_left, atom_expr_right  }
+            |(atom_expr_left, _, atom_expr_right, _)| AlgebraicProperty {
+                atom_expr_left,
+                atom_expr_right
+            }
         )
-    )
+    )(input)
 }
 
 
-fn k_group_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, (char, i8), E> {
+fn k_group_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, (char, i8), E> {
     context(
         "k group",
         map(
             tuple((
                 satisfy(char::is_uppercase),
-                opt(nom::number::complete::be_i8)
+                opt(satisfy(|c| c.is_digit(10))),
             )),
-            |e: char, dim: Option<i8>| (e, match dim {
-                Some(value) => value,
+            |(e, dim)| (e, match dim {
+                Some(value) => value as i8 - '0' as i8,
                 None => 1
             })
         )
     )(input)
 }
 
-fn all_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
+fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject<'i>>, E> {
     context(
         "all",
-        many0(
-            sp_preceded_p(definition_p)
+        fold_many0(
+            sp_preceded!(definition_p),
+            Vec::new,
+            |mut acc: Vec<AlgebraicObject>, mut item| {
+                acc.append(&mut item);
+                acc
+            }
         )
-    )
+    )(input)
 }
 
 
 
 fn main() {
     let input: &'static str = "+ :: {\n    A + B = B + A\n}\n";
-
-
-    
+    print!(
+        "parsing result:\n{:?}\n",
+        root::<(&str, ErrorKind)>(input)
+    )
 }
