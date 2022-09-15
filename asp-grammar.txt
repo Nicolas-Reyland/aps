@@ -3,21 +3,21 @@
 // separator
 SP				:=		[ \t\r\n]
 // operator
-OP				:=		[+-*/.@^]
+OP				:=		[+-*/.@^] SP
 // function name
-FN_NAME			:=		[a-z_][a-z_0-9]*
+FN_NAME			:=		[a-z_][a-z_0-9]* SP
 // definition symbol
-DEF 			:=		'::'
+DEF 			:=		'::' SP
 // function definition symbol
-FN_DEF_SYMBOL	:=		'->'
+FN_DEF_SYMBOL	:=		'->' SP
 // atom symbol
-ATOM_SYMBOL		:=		[A-Z]
+ATOM_SYMBOL		:=		[A-Z] SP
 // special symbol
-SPECIAL_SYMBOL	:=		[0-9]
+SPECIAL_SYMBOL	:=		[0-9] SP
 // equal
-EQU				:=		'='
+EQU				:=		'=' SP
 // ;;
-END             :=      ';;'
+END             :=      ';;' SP
 
 // definition
 DEFINITION		:=		(BRACE_DEF | FN_DEF | K_DEF) SP
