@@ -51,6 +51,13 @@ struct KProperty {
     base: char,
 }
 
+#[derive(Debug, PartialEq)]
+enum AlgebraicObject<'ao> {
+    KProperty(KProperty),
+    Function(AlgebraicFunction<'ao>),
+    Property(AlgebraicProperty<'ao>),
+}
+
 
 fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     let chars = " \t\r\n";
@@ -121,14 +128,14 @@ fn end_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str
 }
 
 
-fn definition_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
+fn definition_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
     context(
         "definition",
         terminated(
             alt((
-                brace_def_p,
-                fn_def_p,
-                k_def_p,
+                map(brace_def_p, |properties| properties.iter().map(|property| AlgebraicObject::Property(property)).collect()),
+                map(fn_def_p, |fn_def| vec![AlgebraicObject::Function(fn_def)]),
+                map(k_def_p, |k_def| vec![AlgebraicObject::KProperty(k_def)]),
             )),
             sp_p
         )
@@ -286,6 +293,15 @@ fn k_group_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, (ch
             })
         )
     )(input)
+}
+
+fn all_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
+    context(
+        "all",
+        many0(
+            sp_preceded_p(definition_p)
+        )
+    )
 }
 
 
