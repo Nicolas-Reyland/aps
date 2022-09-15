@@ -1,7 +1,7 @@
 /* Grammar of ASP Language */
 
-// new line
-NL				:=		'\n'
+// separator
+SP				:=		[ \t\r\n]
 // operator
 OP				:=		[+-*/.@^]
 // function name
@@ -16,27 +16,32 @@ ATOM_SYMBOL		:=		[A-Z]
 SPECIAL_SYMBOL	:=		[0-9]
 // equal
 EQU				:=		'='
+// ;;
+END             :=      ';;'
 
 // definition
-DEFINITION		:=		(BRACE_DEF | FN_DEF | K_DEF) NL
+DEFINITION		:=		(BRACE_DEF | FN_DEF | K_DEF) SP
 // brace-definables
 BRACE_DEF		:=		(OP | '_') DEF '{' PROPERTY_LIST '}'
 // function definition
-FN_DEF			:=		FN_NAME DEF ATOM_FORM FN_DEF_SYMBOL ATOM_FORM
+FN_DEF			:=		FN_NAME DEF ATOM_EXPR FN_DEF_SYMBOL ATOM_EXPR END
 // K definition
 K_DEF			:=		'K' DEF '?'? K_GROUP?
 
 // atom
-ATOM			:=		ATOM_SYMBOL | SPECIAL_SYMBOL | ('(' ATOM_FORM ')')
-// ATOM_FORM
-ATOM_FORM		:=		ATOM (OP ATOM)*
+ATOM			:=		ATOM_SYMBOL | SPECIAL_SYMBOL | ('(' ATOM_EXPR ')')
+// ATOM_EXPR
+ATOM_EXPR		:=		ATOM (OP ATOM)*
 
 // property list
-PROPERTY_LIST	:=		(PROPERTY NL)*
+PROPERTY_LIST	:=		(PROPERTY SP)*
 // property
-PROPERTY		:=		ATOM_FORM EQU (ATOM_FORM | GEN_FORM)+
-// generator form
-GEN_FORM		:=		'$' (OP | ATOM)* '$' ('#' ATOM_SYMBOL)?
+PROPERTY		:=		ATOM_EXPR EQU (ATOM_EXPR | GEN_EXPR)+ END
+// generator EXPR
+GEN_EXPR		:=		'$' (OP | ATOM)* '$' ('#' ATOM_SYMBOL)?
 
 // K Group
 K_GROUP         :=      [A-Z] [0-9]*
+
+// All
+ALL             :=      (SP DEFINITION)*

@@ -27,37 +27,37 @@ K << {
 
 /* Definition of operators and their properties */
 + :: {
-	A + B = B + A
-	(A + B) + C = A + (B + C)
-	A + 0 = A
+	A + B = B + A ;;
+	(A + B) + C = A + (B + C) ;;
+	A + 0 = A ;;
 }
 
 * :: {
 	// commutativity
-	A * B = B * A
+	A * B = B * A ;;
 	// associativity
-	(A * B) * C = A * (B * C)
-	A * 1 = A
-	A * 0 = 0
+	(A * B) * C = A * (B * C) ;;
+	A * 1 = A ;;
+	A * 0 = 0 ;;
 }
 
 ^ :: {
-	A ^ 0 = 1
-	A ^ 1 = A
+	A ^ 0 = 1 ;;
+	A ^ 1 = A ;;
 }
 
-square 	:: A -> A ^ 2
-sqrt	:: A ^ 2 -> A
+square 	:: A -> A ^ 2 ;;
+sqrt	:: A ^ 2 -> A ;;
 
 // Use _ to define properties using multiple operators, not specific to one operator
 _ :: {
 	// distributivity
-	A * (B + C) = A * B + A * C
+	A * (B + C) = A * B + A * C ;;
 	// implying
-	//A * B = A * C => B = C
-	//A + B = A + C => B = C
+	//A * B = A * C => B = C ;;
+	//A + B = A + C => B = C ;;
 	// ^ to * sequence
-	A ^ B = 1 $ * A $#B
+	A ^ B = 1 $ * A $#B ;;
 }
 
 /* Solve some problem */
