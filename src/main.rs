@@ -78,7 +78,7 @@ fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator
     let chars = "+-*/.@^";
     map(
         sp_terminated!(one_of(chars)),
-        |atom_symbol| Operator {op: atom_symbol}
+        |op| Operator { op }
     )(input)
 }
 
@@ -108,7 +108,7 @@ fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str,
         sp_terminated!(
             satisfy(|c| c.is_alphabetic() && c.is_uppercase())
         ),
-        |atom_symbol| Atom::Value(atom_symbol)
+        Atom::Value
     )(input)
 }
 
@@ -117,7 +117,25 @@ fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i s
         sp_terminated!(
             satisfy(|c: char| c.is_numeric())
         ),
-        |atom_symbol| Atom::Special(atom_symbol)
+        Atom::Special
+    )(input)
+}
+
+fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
+    context(
+        "parenthesized atom",
+        map(
+            sp_terminated!(
+                preceded(
+                    char('('),
+                    terminated(
+                        atom_expr_p,
+                        char(')')
+                    )
+                )
+            ),
+            Atom::Parenthesized
+        )
     )(input)
 }
 
@@ -135,9 +153,21 @@ fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i s
         "definition",
         terminated(
             alt((
-                map(brace_def_p, |properties| properties.iter().map(|property| AlgebraicObject::Property(property.clone())).collect()),
-                map(fn_def_p, |fn_def| vec![AlgebraicObject::Function(fn_def)]),
-                map(k_def_p, |k_def| vec![AlgebraicObject::KProperty(k_def)]),
+                map(
+                    brace_def_p,
+                    |properties| properties
+                        .iter()
+                        .map(|property| AlgebraicObject::Property(property.clone()))
+                        .collect()
+                ),
+                map(
+                    fn_def_p,
+                    |fn_def| vec![AlgebraicObject::Function(fn_def)]
+                ),
+                map(
+                    k_def_p,
+                    |k_def| vec![AlgebraicObject::KProperty(k_def)]
+                ),
             )),
             sp_p
         )
@@ -151,21 +181,24 @@ fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i st
             tuple((
                 alt((
                     op_p,
-                    map(
-                        satisfy(|c| c == '_'),
-                        |op| Operator { op }
+                    sp_terminated!(
+                        map(
+                            satisfy(|c| c == '_'),
+                            |op| Operator { op }
+                        )
                     )
                 )),
-                sp_preceded!(def_p),
-                char('{'),
+                def_p,
+                sp_terminated!(char('{')),
                 property_list_p,
-                char('}'),
+                sp_terminated!(char('}')),
             )),
             |(_op, _, _, properties, _)| properties
         )
     )(input)
 }
 
+// TESTED
 fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicFunction<'i>, E> {
     context(
         "fn def",
@@ -188,7 +221,7 @@ fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -
         "K def",
         map(
             tuple((
-                char('K'),
+                sp_terminated!(char('K')),
                 def_p,
                 opt(value(true, char('?'))),
                 opt(k_group_p),
@@ -222,16 +255,7 @@ fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) ->
         alt((
             atom_symbol_p,
             special_symbol_p,
-            map(
-                preceded(
-                    char('('),
-                    terminated(
-                        atom_expr_p,
-                        char(')')
-                    )
-                ),
-                |atom_expr| Atom::Parenthesized(atom_expr)
-            )
+            parenthesized_atom_p,
         ))
     )(input)
 }
@@ -251,16 +275,19 @@ fn atom_expr_map_f<'ae>((first, rest): (Atom, Vec<(Operator, Atom)>)) -> AtomExp
     AtomExpr { atoms, operators }
 }
 
+
 fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AtomExpr, E> {
     context(
         "atom expr",
         map(
             tuple((
                 atom_p,
-                many0(tuple((
-                    op_p,
-                    atom_p,
-                )))
+                many0(
+                    tuple((
+                        op_p,
+                        atom_p,
+                    ))
+                )
             )),
             atom_expr_map_f
         )
@@ -271,7 +298,7 @@ fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'
     context(
         "property list",
         many0(
-            terminated(property_p, sp_p)
+            sp_terminated!(property_p)
         )
     )(input)
 }
@@ -301,7 +328,11 @@ fn k_group_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str)
         map(
             tuple((
                 satisfy(char::is_uppercase),
-                opt(satisfy(|c| c.is_digit(10))),
+                sp_terminated!(
+                    opt(
+                        satisfy(|c| c.is_digit(10))
+                    )
+                ),
             )),
             |(e, dim)| (e, match dim {
                 Some(value) => value as i8 - '0' as i8,
@@ -326,11 +357,184 @@ fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> I
 }
 
 
-
 fn main() {
-    let input: &'static str = "+ :: {\n    A + B = B + A\n}\n";
+    let input: &'static str = "+ :: {\n    A + B = B + A ;; \n}-::{A=A;;}\n";
     print!(
-        "parsing result:\n{:?}\n",
+        "parsing result:\n{:#?}\n",
         root::<(&str, ErrorKind)>(input)
+    )
+}
+
+#[test]
+fn test_atom_expr_p() {
+    assert_eq!(
+        atom_expr_p::<(&str, ErrorKind)>(
+            "A + 0 * (C ^ (2 / Q))"
+        ),
+        Ok(
+            (
+                "",
+                AtomExpr {
+                    atoms: vec![
+                        Atom::Value(
+                            'A',
+                        ),
+                        Atom::Special(
+                            '0',
+                        ),
+                        Atom::Parenthesized(
+                            AtomExpr {
+                                atoms: vec![
+                                    Atom::Value(
+                                        'C',
+                                    ),
+                                    Atom::Parenthesized(
+                                        AtomExpr {
+                                            atoms: vec![
+                                                Atom::Special(
+                                                    '2',
+                                                ),
+                                                Atom::Value(
+                                                    'Q',
+                                                ),
+                                            ],
+                                            operators: vec![
+                                                Operator {
+                                                    op: '/',
+                                                },
+                                            ],
+                                        },
+                                    ),
+                                ],
+                                operators: vec![
+                                    Operator {
+                                        op: '^',
+                                    },
+                                ],
+                            },
+                        ),
+                    ],
+                    operators: vec![
+                        Operator {
+                            op: '+',
+                        },
+                        Operator {
+                            op: '*',
+                        },
+                    ],
+                },
+            ),
+        )
+    );
+}
+
+#[test]
+fn test_brace_def_p() {
+    assert_eq!(
+        brace_def_p::<(&str, ErrorKind)>(
+            "+ :: { A = A ;; B = C ;; } "
+        ),
+        Ok(
+            (
+                "",
+                vec![
+                    AlgebraicProperty {
+                        atom_expr_left: AtomExpr {
+                            atoms: vec![
+                                Atom::Value(
+                                    'A',
+                                ),
+                            ],
+                            operators: vec![],
+                        },
+                        atom_expr_right: AtomExpr {
+                            atoms: vec![
+                                Atom::Value(
+                                    'A',
+                                ),
+                            ],
+                            operators: vec![],
+                        },
+                    },
+                    AlgebraicProperty {
+                        atom_expr_left: AtomExpr {
+                            atoms: vec![
+                                Atom::Value(
+                                    'B',
+                                ),
+                            ],
+                            operators: vec![],
+                        },
+                        atom_expr_right: AtomExpr {
+                            atoms: vec![
+                                Atom::Value(
+                                    'C',
+                                ),
+                            ],
+                            operators: vec![],
+                        },
+                    },
+                ],
+            ),
+        )
+    )
+}
+
+#[test]
+fn test_fn_def_p() {
+    assert_eq!(
+        fn_def_p::<(&str, ErrorKind)>(
+            "square :: A -> A ^ 2 ;; "
+        ),
+        Ok(
+            (
+                "",
+                AlgebraicFunction {
+                    name: "square ",
+                    atom_expr_left: AtomExpr {
+                        atoms: vec![
+                            Atom::Value(
+                                'A',
+                            ),
+                        ],
+                        operators: vec![],
+                    },
+                    atom_expr_right: AtomExpr {
+                        atoms: vec![
+                            Atom::Value(
+                                'A',
+                            ),
+                            Atom::Special(
+                                '2',
+                            ),
+                        ],
+                        operators: vec![
+                            Operator {
+                                op: '^',
+                            },
+                        ],
+                    },
+                },
+            ),
+        )
+    )
+}
+
+#[test]
+fn test_k_def_p() {
+    assert_eq!(
+        k_def_p::<(&str, ErrorKind)>(
+            "K :: ?N5 ;; "
+        ),
+        Ok(
+            (
+                ";; ",
+                KProperty {
+                    undefined_property: true,
+                    base: 'N',
+                    dim: 5,
+                },
+            ),
+        )
     )
 }
