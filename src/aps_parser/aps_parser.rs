@@ -67,6 +67,13 @@ impl fmt::Display for Atom {
     }
 }
 
+pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
+    if expr.atoms.len() == 1 {
+        return expr.atoms[0].clone();
+    }
+    Atom::Parenthesized(expr)
+}
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct Operator {
     op: char,
@@ -265,7 +272,7 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(inpu
                     )
                 )
             ),
-            Atom::Parenthesized
+            parenthesized_atom
         )
     )(input)
 }

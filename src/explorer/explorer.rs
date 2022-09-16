@@ -1,13 +1,26 @@
 // Graph Explorer
 
-use std::{collections::HashMap};
+use std::{collections::HashMap, fmt};
 
 use crate::aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator};
 
 #[derive(Debug, PartialEq, Hash)]
-pub enum Either<T1, T2> {
-    Left(T1),
-    Right(T2),
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+impl<L, R> fmt::Display for Either<L, R>
+where
+    L: fmt::Display,
+    R: fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Either::Left(x) => x.fmt(f),
+            Either::Right(x) => x.fmt(f),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -16,12 +29,14 @@ pub struct ExprGraph {
     max_depth: u8,
 }
 
+type ExprNodeIndex = i8;
+
 #[derive(Debug, Clone, Hash)]
 pub struct ExprNode {
     atom_expr: aps_parser::AtomExpr,
-    neighbours: Vec<ExprNode>,
+    neighbours: Vec<ExprNodeIndex>,
     depth: i8,
-    index: i8,
+    index: ExprNodeIndex,
 }
 
 impl PartialEq for ExprNode {
@@ -32,6 +47,22 @@ impl PartialEq for ExprNode {
 
     fn ne(&self, other: &Self) -> bool {
         !self.eq(other)
+    }
+}
+
+impl fmt::Display for ExprNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ExprNode {{ expr: '{}', depth: {}, index: {}, neighbours: [",
+            self.atom_expr,
+            self.depth,
+            self.index
+        )?;
+        for neighbour in &self.neighbours {
+            write!(f, "{} ", neighbour)?;
+        }
+        write!(f, "] }}")
     }
 }
 
@@ -85,12 +116,11 @@ pub fn explore_graph(
     let mut new_node_index = graph.nodes.len() as i8;
     for (mut src_node, mut new_node) in new_nodes {
         if ! graph.nodes.contains(&new_node) {
-            println!("New node: {:?}", new_node);
             at_least_one_new_node = true;
             // add source node to the new node's neighbours
-            new_node.neighbours.push(src_node.clone());
+            new_node.neighbours.push(src_node.index);
             // add the new node to the source node's neighbours
-            src_node.neighbours.push(new_node.clone());
+            src_node.neighbours.push(new_node.index);
             // set the depth of the new node
             new_node.depth = src_node.depth + 1;
             // set the index of the new node
@@ -120,7 +150,11 @@ pub fn print_graph_dot_format(graph: &ExprGraph) -> () {
 
 fn print_node_dot_format(node: &ExprNode) -> () {
     // start printing definition line
-    print!("\t{:?} [label=\"", node.index);
+    print!(
+        "\t{} [shape=record color={} label=\"",
+        node.index,
+        if node.index == 0 {"red"} else {"black"}
+    );
     // print label of node
     print!("{}", node.atom_expr);
     // end printing definition line
@@ -128,9 +162,7 @@ fn print_node_dot_format(node: &ExprNode) -> () {
 
     // start printing neighbours
     for neighbour in &node.neighbours {
-        if node.index < neighbour.index {
-            print!("\t{:?} -> {:?}\n", node.index, neighbour.index)
-        }
+        print!("\t{} -> {}\n", neighbour, node.index)
     }
     print!("\n");
 }
@@ -184,7 +216,7 @@ fn atom_expressions_match(
             mappings.insert(atom_b.clone(), Either::Right(
                 AtomExpr {
                     atoms: src_expr.atoms[i..].to_vec(),
-                    operators: src_expr.operators[i+1..].to_vec()
+                    operators: src_expr.operators[i..].to_vec()
                 }
             ));
             if i + 1 != num_p_atoms {
@@ -229,7 +261,7 @@ fn atom_expressions_match(
         // go to next (operator, atom) pair
         i += 1;
     }
-    if i != num_src_atoms {
+    if i != num_src_atoms || i != num_p_atoms {
         return None
     }
     Some(mappings)
@@ -294,10 +326,15 @@ fn generate_new_expression(
         }
         // expand extension expressions
         if atom_v == &Atom::Extension {
-            let sub_expr: AtomExpr = match mappings.get(atom_v) {
-                Some(Either::Left(atom)) => panic!("Extension mapping is atom, not atom-expr: {:?}\n", atom),
+            let sub_expr: AtomExpr = match mappings.get(&Atom::Extension) {
+                Some(Either::Left(atom)) => panic!("Extension mapping is atom, not atom-expr: {}\n", atom),
                 Some(Either::Right(expr)) => expr.clone(),
-                None => panic!("Could not find mapping for extension\n")
+                None => panic!(
+                    "Could not find mapping for extension:\nMapping :\n{:#?}\nExpr-V :\n{}\nAtom-V :\n{}\n",
+                    &mappings,
+                    &v_expr,
+                    &atom_v,
+                )
             };
             atoms.extend(sub_expr.atoms);
             operators.extend(sub_expr.operators);
@@ -306,7 +343,7 @@ fn generate_new_expression(
             atoms.push(
                 match atom_v {
                     Atom::Parenthesized(par_v) => {
-                        Atom::Parenthesized(generate_new_expression(par_v, mappings))
+                        aps_parser::parenthesized_atom(generate_new_expression(par_v, mappings))
                     },
                     _ => match mappings.get(atom_v) {
                         Some(Either::Left(atom)) => atom.clone(),

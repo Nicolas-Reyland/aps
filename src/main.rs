@@ -27,6 +27,7 @@ fn main() {
     };
     // parse input expression
     let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
+        // "A * (B + C) + (D + 0) * 1" => "A * B + A * C + D"
         "(A + B) + C + D + E"
     ) {
         Ok(("", expr)) => expr,
