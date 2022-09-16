@@ -143,7 +143,7 @@ pub fn explore_graph(
 pub fn print_graph_dot_format(graph: &ExprGraph) -> () {
     println!("/* DOT FORMAT START */");
     // start printing the graph
-    print!("digraph G {{\n\tedge [minlen=3.5];\n");
+    print!("digraph G {{\n\trankdir = LR;\n\tedge [minlen=3.5];\n");
     for node in &graph.nodes {
         print_node_dot_format(node);
     }
@@ -390,10 +390,11 @@ fn generate_new_expression(
                     Atom::Parenthesized(par_v) => {
                         aps_parser::parenthesized_atom(generate_new_expression(par_v, mappings))
                     },
+                    Atom::Special(_) => atom_v.clone(),
                     _ => match mappings.get(atom_v) {
                         Some(Either::Left(atom)) => atom.clone(),
                         Some(Either::Right(_)) => panic!("Found extension instead of atom\n"),
-                        None => panic!("Could not find mapping for atom {:?}\n", atom_v)
+                        None => panic!("Could not find mapping for atom {:?} in expr '{}'\nMappings :\n{:#?}\n", atom_v, v_expr, mappings)
                     }
                 }
             )

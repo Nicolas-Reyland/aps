@@ -1,19 +1,19 @@
 /* DOT FORMAT START */
 digraph G {
 	edge [minlen=3.5];
-	0 [shape=record color=red label="A * 1 + B * 0"];
+	0 [shape=record color=red label="A + 0"];
 
-	1 [shape=record color=blue label="(A * 1) + B * 0"];
-	0 -> 1 [label=< <B> A * B + ... = (A * B) + ... </B> > fontsize=7 fontcolor=darkgreen];
+	1 [shape=record color=blue label="0 + A"];
+	0 -> 1 [label=< <B> A + B = B + A </B> > fontsize=7 fontcolor=darkgreen];
 
-	2 [shape=record color=blue label="(1 * A) + B * 0"];
-	1 -> 2 [label=< <B> A * B = B * A </B> > fontsize=7 fontcolor=darkgreen];
+	2 [shape=record color=blue label="A"];
+	0 -> 2 [label=< <B> A + 0 = A </B> > fontsize=7 fontcolor=darkgreen];
 
-	3 [shape=record color=blue label="A + B * 0"];
-	1 -> 3 [label=< <B> A * 1 = A </B> > fontsize=7 fontcolor=darkgreen];
+	3 [shape=record color=blue label="A * 1"];
+	2 -> 3 [label=< <B> A * 1 = A </B> > fontsize=7 fontcolor=darkgreen];
 
-	4 [shape=record color=blue label="1 * A + B * 0"];
-	2 -> 4 [label=< <B> A * B + ... = (A * B) + ... </B> > fontsize=7 fontcolor=darkgreen];
+	4 [shape=record color=blue label="1 * A"];
+	3 -> 4 [label=< <B> A * B = B * A </B> > fontsize=7 fontcolor=darkgreen];
 
 }
 /* DOT FORMAT END */
