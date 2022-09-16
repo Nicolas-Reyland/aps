@@ -144,7 +144,7 @@ fn atom_expressions_match(
         // compare atoms
         let atom_a = &src_expr.atoms[i];
         let atom_b = &p_expr.atoms[i];
-        println!("atom_a = {:?}\natom_b = {:?}\n", atom_a, atom_b);
+        //println!("atom_a = {:?}\natom_b = {:?}\n", atom_a, atom_b);
         // map rest of src_atom to '...'
         if atom_b == &Atom::Extension {
             mappings.insert(atom_b.clone(), Either::Right(
@@ -155,7 +155,7 @@ fn atom_expressions_match(
             ));
             return Some(mappings)
         }
-        match left_to_right_match(atom_a, atom_b, functions, &mappings) {
+        match left_to_right_match(atom_a, atom_b, functions) {
             (
                 true,
                 None
@@ -182,7 +182,7 @@ fn atom_expressions_match(
                         return None
                     }
                 },
-                Either::Right(expr) => return None,
+                Either::Right(_) => return None,
             },
             None => assert_eq!(
                 mappings.insert(atom_b.clone(), Either::Left(atom_a.clone())),
@@ -203,10 +203,9 @@ fn atom_expressions_match(
 fn left_to_right_match(
     atom_a: &Atom,
     atom_b: &Atom,
-    functions: &Vec<AlgebraicFunction>,
-    mappings: &PropertyMapping
+    functions: &Vec<AlgebraicFunction>
 ) -> (bool, Option<PropertyMapping>) {
-    println!("Map {:?} to {:?} ?", atom_a, atom_b);
+    //println!("Map {:?} to {:?} ?\n", atom_a, atom_b);
     match atom_b { // we match the second atom !!
         Atom::Parenthesized(par_b) => match atom_a {
             Atom::Parenthesized(par_a) => match atom_expressions_match(
@@ -245,7 +244,7 @@ fn generate_new_expression(
     // match each atom of the v-expr
     let num_v_atoms = v_expr.atoms.len();
     let mut i = 0;
-    println!("Mappings:\n{:#?}\n", mappings);
+    //println!("Mappings:\n{:#?}\n", mappings);
     while i  < num_v_atoms
     {
         let atom_v = &v_expr.atoms[i];
@@ -279,7 +278,6 @@ fn generate_new_expression(
         }
         i += 1;
     }
-
     AtomExpr { atoms, operators }
 }
 
