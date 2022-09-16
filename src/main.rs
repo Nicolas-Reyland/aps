@@ -1,6 +1,6 @@
 /* Parser for Algebraic Proofing System Language */
 
-use std::{fs};
+use std::{env, fs};
 
 use aps_parser::{AlgebraicProperty, AlgebraicFunction, KProperty, AlgebraicObject};
 use explorer::{explore_graph, print_graph_dot_format};
@@ -26,9 +26,11 @@ fn main() {
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
     };
     // parse input expression
+    let args: Vec<String> = env::args().collect();
     let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
         // "A * (B + C) + (D + 0) * 1" => "A * B + A * C + D"
-        "(A + B) + C + D + E"
+        &args[1] // => "D + ((A + B) + C)", "(C + (A + B)) + D", "((B + A) + C) + D", etc
+        //                               ^^^^^                 ^^^^^^^^^^^^          ^^^^^^
     ) {
         Ok(("", expr)) => expr,
         Ok((rest, parsed)) => panic!(
@@ -46,8 +48,8 @@ fn main() {
     ) = split_algebraic_objects(alg_objects);
     let mut graph = explorer::init_graph(src_expr);
     // explore the graph a few times
-    for _ in 0..3 {
-        print_graph_dot_format(&graph);
+    for _ in 0..5 {
+        // print_graph_dot_format(&graph);
         explore_graph(&mut graph, properties.clone(), functions.clone());
     }
     print_graph_dot_format(&graph);

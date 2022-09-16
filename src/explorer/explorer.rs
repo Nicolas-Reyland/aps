@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, fmt};
 
-use crate::aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator};
+use crate::aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator, parenthesized_atom};
 
 #[derive(Debug, PartialEq, Hash)]
 pub enum Either<L, R> {
@@ -29,12 +29,13 @@ pub struct ExprGraph {
     max_depth: u8,
 }
 
-type ExprNodeIndex = i8;
+type ExprNodeIndex = usize;
 
 #[derive(Debug, Clone, Hash)]
 pub struct ExprNode {
     atom_expr: aps_parser::AtomExpr,
     neighbours: Vec<ExprNodeIndex>,
+    transforms: Vec<AlgebraicProperty>,
     depth: i8,
     index: ExprNodeIndex,
 }
@@ -73,6 +74,7 @@ pub fn init_graph(expr: AtomExpr) -> ExprGraph {
     let base_node = ExprNode {
         atom_expr: expr,
         neighbours: Vec::new(),
+        transforms: Vec::new(),
         depth: 0,
         index: 0,
     };
@@ -98,22 +100,23 @@ pub fn explore_graph(
     for i in 0..graph.nodes.len() {
         let node = graph.nodes[i].clone();
         for property in properties.clone() {
-            match apply_property(&node.atom_expr, &property, &functions) {
-                Some(new_expr) => new_nodes.push((
+            let new_expressions = apply_property(&node.atom_expr, &property, &functions);
+            new_nodes.extend(
+                new_expressions.iter().map(|new_expr| (
                     node.clone(),
                     ExprNode {
-                        atom_expr: new_expr,
+                        atom_expr: new_expr.clone(),
                         neighbours: vec![],
-                        depth: -1,
-                        index: -1,
+                        transforms: vec![property.clone()],
+                        depth: 0,
+                        index: 0,
                     }
-                )),
-                None => continue,
-            }
+                ))
+            );
         }
     }
     let mut at_least_one_new_node = false;
-    let mut new_node_index = graph.nodes.len() as i8;
+    let mut new_node_index = graph.nodes.len();
     for (mut src_node, mut new_node) in new_nodes {
         if ! graph.nodes.contains(&new_node) {
             at_least_one_new_node = true;
@@ -140,7 +143,7 @@ pub fn explore_graph(
 pub fn print_graph_dot_format(graph: &ExprGraph) -> () {
     println!("/* DOT FORMAT START */");
     // start printing the graph
-    print!("digraph G {{\n");
+    print!("digraph G {{\n\tedge [minlen=3.5];\n");
     for node in &graph.nodes {
         print_node_dot_format(node);
     }
@@ -153,40 +156,82 @@ fn print_node_dot_format(node: &ExprNode) -> () {
     print!(
         "\t{} [shape=record color={} label=\"",
         node.index,
-        if node.index == 0 {"red"} else {"black"}
+        if node.index == 0 {"red"} else {"blue"}
     );
     // print label of node
     print!("{}", node.atom_expr);
     // end printing definition line
-    print!("\"]\n");
+    print!("\"];\n");
 
     // start printing neighbours
-    for neighbour in &node.neighbours {
-        print!("\t{} -> {}\n", neighbour, node.index)
+    for (nb_index, neighbour) in node.neighbours.iter().enumerate() {
+        print!(
+            "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
+            neighbour,
+            node.index,
+            node.transforms[nb_index as usize]
+        );
     }
     print!("\n");
 }
 
-fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: &Vec<AlgebraicFunction>) -> Option<AtomExpr> {
-    match atom_expressions_match(
+fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: &Vec<AlgebraicFunction>) -> Vec<AtomExpr> {
+    let mut new_expressions = apply_machted_substitution(
+        src_expr,
+        &property.atom_expr_left,
+        &property.atom_expr_right,
+        functions
+    );
+    new_expressions.extend(
+        apply_machted_substitution(
             src_expr,
-            &property.atom_expr_left,
-            functions)
-        {
-        Some(mappings) => Some(
-            generate_new_expression(&property.atom_expr_right, &mappings)
-        ),
-        None => match atom_expressions_match(
-            src_expr,
+            &property.atom_expr_right,
             &property.atom_expr_left,
             functions
-        ) {
-            Some(mappings) => Some(
-                generate_new_expression(&property.atom_expr_right, &mappings)
-            ),
-            None => None
-        }
+        )
+    );
+    return new_expressions;
+}
+
+/// try to match the src_expr to the left_expr, then generate a new expression based on right_expr
+fn apply_machted_substitution(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr, functions: &Vec<AlgebraicFunction>) -> Vec<AtomExpr>
+{
+    // call 'atom_expressions_match' on every expression (src_expr and sub-expression in parentheses)
+    let mut new_expressions: Vec<AtomExpr> = Vec::new();
+    // base call on src_expr
+    match atom_expressions_match(src, left, functions) {
+        Some(mappings) => {
+            let new_expr = generate_new_expression(right, &mappings);
+            new_expressions.push(new_expr);
+        },
+        None => (),
     }
+    // recursively call 'atom_expressions_match' on the sub-expressions
+    for (sub_i, sub) in src.atoms.iter().enumerate().filter_map(|(atom_i, atom)| match atom {
+        Atom::Parenthesized(par) => Some((atom_i, par)),
+        _ => None,
+    }) {
+        new_expressions.extend(
+            apply_machted_substitution(sub, left, right, functions)
+                .iter()
+                .map(
+                    |sub_tr| {
+                        // reconstruct like that : <everything b4> (new sub) <everything after>
+                        // only the sub changes, compared to the src. no other atoms
+                        let mut src_atoms_prefix = src.atoms[..sub_i].to_vec().clone();
+                        src_atoms_prefix.push(parenthesized_atom(sub_tr.clone()));
+                        let src_atoms_suffix = src.atoms[sub_i+1..].to_vec().clone();
+                        src_atoms_prefix.extend(src_atoms_suffix);
+                        AtomExpr {
+                            atoms: src_atoms_prefix,
+                            operators: src.operators.clone(),
+                        }
+                    }
+                )
+                .collect::<Vec<AtomExpr>>()
+        );
+    }
+    return new_expressions;
 }
 
 fn atom_expressions_match(
@@ -387,9 +432,6 @@ fn test() {
         ),
         Err(err) => panic!("Failed to parse property:\n{:#?}", err)
     };
-    let new_expr = match apply_property(&src_expr, &property, &vec![]) {
-        Some(expr) => expr,
-        None => panic!("Could not apply property")
-    };
-    println!("New Expression:\n{:#?}\n", new_expr);
+    let new_expressions = apply_property(&src_expr, &property, &vec![]);
+    println!("New Expressions :\n{:#?}\n", new_expressions);
 }

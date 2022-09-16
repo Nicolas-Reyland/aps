@@ -156,11 +156,17 @@ pub struct BraceGroup {
     pub properties: Vec<AlgebraicProperty>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct AlgebraicProperty {
     pub atom_expr_left: AtomExpr,
     pub atom_expr_right: AtomExpr,
     // relation: Relation (=, <=>, =>, >, <, ...)
+}
+
+impl fmt::Display for AlgebraicProperty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} = {}", self.atom_expr_left, self.atom_expr_right)
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
