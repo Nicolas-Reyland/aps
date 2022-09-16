@@ -25,7 +25,7 @@ where
 
 #[derive(Debug)]
 pub struct ExprGraph {
-    nodes: Vec<ExprNode>,
+    pub nodes: Vec<ExprNode>,
     max_depth: u8,
 }
 
@@ -33,11 +33,11 @@ type ExprNodeIndex = usize;
 
 #[derive(Debug, Clone, Hash)]
 pub struct ExprNode {
-    atom_expr: aps_parser::AtomExpr,
-    neighbours: Vec<ExprNodeIndex>,
+    pub atom_expr: aps_parser::AtomExpr,
+    pub neighbours: Vec<ExprNodeIndex>,
     transforms: Vec<AlgebraicProperty>,
     depth: i8,
-    index: ExprNodeIndex,
+    pub index: ExprNodeIndex,
 }
 
 impl PartialEq for ExprNode {
@@ -93,14 +93,14 @@ pub fn init_graph(expr: AtomExpr) -> ExprGraph {
 /// The returned value is the number of new nodes that were added
 pub fn explore_graph(
     graph: &mut ExprGraph,
-    properties: Vec<AlgebraicProperty>,
-    functions: Vec<AlgebraicFunction>,
+    properties: &Vec<AlgebraicProperty>,
+    functions: &Vec<AlgebraicFunction>,
 ) -> bool {
     let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
     for i in 0..graph.nodes.len() {
         let node = graph.nodes[i].clone();
         for property in properties.clone() {
-            let new_expressions = apply_property(&node.atom_expr, &property, &functions);
+            let new_expressions = apply_property(&node.atom_expr, &property, functions);
             new_nodes.extend(
                 new_expressions.iter().map(|new_expr| (
                     node.clone(),

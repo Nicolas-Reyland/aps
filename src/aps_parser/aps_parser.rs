@@ -541,3 +541,19 @@ pub fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) 
     )(input)
 }
 
+
+pub fn split_algebraic_objects(
+    alg_objects: Vec<AlgebraicObject>
+) -> (Vec<AlgebraicProperty>, Vec<AlgebraicFunction>, Vec<KProperty>) {
+    let mut properties: Vec<AlgebraicProperty> = Vec::new();
+    let mut functions: Vec<AlgebraicFunction> = Vec::new();
+    let mut k_properties: Vec<KProperty> = Vec::new();
+    for obj in alg_objects {
+        match obj {
+            AlgebraicObject::KProperty(kp) => k_properties.push(kp),
+            AlgebraicObject::PropertyGroup(bg) => properties.extend(bg.properties),
+            AlgebraicObject::Function(f) => functions.push(f),
+        }
+    }
+    (properties, functions, k_properties)
+}

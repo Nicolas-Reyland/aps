@@ -2,11 +2,16 @@
 
 use std::{env, fs};
 
-use aps_parser::{AlgebraicProperty, AlgebraicFunction, KProperty, AlgebraicObject};
+use aps_parser::{AlgebraicProperty, AlgebraicFunction, KProperty, AlgebraicObject, AtomExpr};
 use explorer::{explore_graph, print_graph_dot_format};
+use solution::solve_equality;
 
 #[path = "aps_parser/aps_parser.rs"] mod aps_parser;
 #[path = "explorer/explorer.rs"] mod explorer;
+#[path = "explorer/solution.rs"] mod solution;
+
+static MAX_GRAPH_EXPLORATION_DEPTH: u8 = 10;
+static MAX_NODES_PER_GRAPH: usize = 10_000;
 
 fn main() {
     let input_str = match fs::read_to_string("test.aps") {
@@ -27,10 +32,39 @@ fn main() {
     };
     // parse input expression
     let args: Vec<String> = env::args().collect();
-    let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
-        // "A * (B + C) + (D + 0) * 1" => "A * B + A * C + D"
-        &args[1] // => "D + ((A + B) + C)", "(C + (A + B)) + D", "((B + A) + C) + D", etc
-        //                               ^^^^^                 ^^^^^^^^^^^^          ^^^^^^
+    let left_expr = str2atom_expr(&args[1]);
+    let right_expr = str2atom_expr(&args[2]);
+    // => "D + ((A + B) + C)", "(C + (A + B)) + D", "((B + A) + C) + D", etc
+    //     ^^^^^                 ^^^^^^^^^^^^          ^^^^^^
+
+    // create graph and stuff
+    match solve_equality(
+        alg_objects,
+        &left_expr,
+        &right_expr
+    ) {
+        Some(route) => {
+            println!("Solution found for '{left_expr} = {right_expr}' :");
+            for point in route {
+                println!("-> {}", point)
+            }
+        },
+        None => eprintln!("No stolution found for '{left_expr} = {right_expr}' :(")
+    }
+    /*
+    let mut graph = explorer::init_graph(src_expr);
+    // explore the graph a few times
+    for _ in 0..String::from(&args[1]).parse::<usize>().unwrap() {
+        // print_graph_dot_format(&graph);
+        explore_graph(&mut graph, &properties, &functions);
+    }
+    print_graph_dot_format(&graph)
+    */
+}
+
+fn str2atom_expr(input: &str) -> AtomExpr {
+    match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
+        input
     ) {
         Ok(("", expr)) => expr,
         Ok((rest, parsed)) => panic!(
@@ -39,54 +73,5 @@ fn main() {
             parsed
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
-    };
-    // create graph and stuff
-    let (
-        properties,
-        functions,
-        _k_properties,
-    ) = split_algebraic_objects(alg_objects);
-    let mut graph = explorer::init_graph(src_expr);
-    // explore the graph a few times
-    for _ in 0..5 {
-        // print_graph_dot_format(&graph);
-        explore_graph(&mut graph, properties.clone(), functions.clone());
     }
-    print_graph_dot_format(&graph);
-
-
-
-
-    /*
-    let operations = match aps_parser::root::<aps_parser::ApsParserKind>(&input) {
-        Ok(("", value)) => value,
-        Ok((rest, parsed)) => panic!(
-            "unfinished parse: '{}'\nParsed content:\n{:#?}\n",
-            rest,
-            parsed
-        ),
-        Err(err) => panic!("{:#?}", err)
-    };
-    print!(
-        "parsing result:\n{:#?}\n",
-        operations
-    )
-    */
 }
-
-fn split_algebraic_objects(
-    alg_objects: Vec<AlgebraicObject>
-) -> (Vec<AlgebraicProperty>, Vec<AlgebraicFunction>, Vec<KProperty>) {
-    let mut properties: Vec<AlgebraicProperty> = Vec::new();
-    let mut functions: Vec<AlgebraicFunction> = Vec::new();
-    let mut k_properties: Vec<KProperty> = Vec::new();
-    for obj in alg_objects {
-        match obj {
-            AlgebraicObject::KProperty(kp) => k_properties.push(kp),
-            AlgebraicObject::PropertyGroup(bg) => properties.extend(bg.properties),
-            AlgebraicObject::Function(f) => functions.push(f),
-        }
-    }
-    (properties, functions, k_properties)
-}
-
