@@ -3,6 +3,7 @@
 use std::fs;
 
 #[path = "aps_parser/aps_parser.rs"] mod aps_parser;
+#[path = "explorer/explorer.rs"] mod exporer;
 
 fn main() {
     let input = match fs::read_to_string("test.aps") {
@@ -11,7 +12,11 @@ fn main() {
     };
     let operations = match aps_parser::root::<aps_parser::ApsParserKind>(&input) {
         Ok(("", value)) => value,
-        Ok((rest, _)) => panic!("unfinished parse: '{}'", rest),
+        Ok((rest, parsed)) => panic!(
+            "unfinished parse: '{}'\nParsed content:\n{:#?}\n",
+            rest,
+            parsed
+        ),
         Err(err) => panic!("{:#?}", err)
     };
     print!(

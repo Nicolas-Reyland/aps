@@ -16,7 +16,7 @@ use nom::{
 
 pub type ApsParserKind<'i> = (&'i str, ErrorKind);
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, Hash, Eq)]
 pub enum Atom {
     Parenthesized(AtomExpr),
     Value(char),
@@ -25,39 +25,73 @@ pub enum Atom {
     Generator(GeneratorExpr),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl PartialEq for Atom {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Parenthesized(expr_a), Self::Parenthesized(expr_b)) => expr_a == expr_b,
+            (Self::Value(val_a), Self::Value(val_b)) => val_a == val_b,
+            (Self::Special(spe_a), Self::Special(spe_b)) => spe_a == spe_b,
+            (Self::Generator(_), Self::Generator(_)) => panic!("Comparing generators :\n{:#?}\n AND \n{:#?}\n", self, other),
+            (Self::Extension, Self::Extension) => true,
+            _ => false,
+        }
+    }
+
+    fn ne(&self, other: &Self) -> bool {
+        !self.eq(other)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct Operator {
     op: char,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, Hash, Eq)]
 pub struct AtomExpr {
-    atoms: Vec<Atom>,
-    operators: Vec<Operator>,
+    pub atoms: Vec<Atom>,
+    pub operators: Vec<Operator>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+impl PartialEq for AtomExpr {
+    fn eq(&self, other: &Self) -> bool {
+        let num_atoms = self.atoms.len();
+        if num_atoms != other.atoms.len() {
+            return false;
+        }
+        for i in 0..num_atoms-1 {
+            if self.atoms[i] != other.atoms[i] ||
+                self.operators[i] != other.operators[i]
+            {
+                return false;
+            }
+        }
+        self.atoms[num_atoms - 1] == other.atoms[num_atoms - 1]
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum GeneratorElement {
     GenOperator(Operator),
     GenAtom(Atom),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GeneratorExpr {
     elements: Vec<GeneratorElement>,
     iterator: Box<Atom>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BraceGroup {
-    operator: Operator,
-    properties: Vec<AlgebraicProperty>,
+    pub operator: Operator,
+    pub properties: Vec<AlgebraicProperty>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AlgebraicProperty {
-    atom_expr_left: AtomExpr,
-    atom_expr_right: AtomExpr,
+    pub atom_expr_left: AtomExpr,
+    pub atom_expr_right: AtomExpr,
     // relation: Relation (=, <=>, =>, >, <, ...)
 }
 
@@ -75,7 +109,7 @@ pub struct KProperty {
     dim: i8,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum AlgebraicObject<'ao> {
     KProperty(KProperty),
     PropertyGroup(BraceGroup),
@@ -285,6 +319,7 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i s
 
 /// k_def : 'K' sp def ('?'? k_group | '?')
 pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, KProperty, E> {
+    // TODO: fix the case 'K :: ? ;;' (doesn't work)
     context(
         "K def",
         map(
@@ -297,9 +332,10 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i st
                         map(k_group_p, Some),
                     )),
                     value((Some(true), Some(('K', 1))), char('?'))
-                ))
+                )),
+                end_p,
             )),
-            |(_, _, (c, group))| {
+            |(_, _, (c, group), _)| {
                 let undefined_property = match c {
                     Some(v) => v, // should be true
                     None => false
@@ -352,7 +388,7 @@ pub fn atom_expr_map_f<'ae>((first, rest): (Atom, Vec<(Operator, Atom)>)) -> Ato
 
 
 /// atom_expr : atom (op atom)*
-fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AtomExpr, E> {
+pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AtomExpr, E> {
     context(
         "atom expr",
         map(

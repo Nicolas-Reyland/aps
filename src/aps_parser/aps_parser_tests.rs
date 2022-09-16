@@ -173,7 +173,7 @@ fn test_k_def_p() {
         ),
         Ok(
             (
-                ";; ",
+                "",
                 KProperty {
                     undefined_property: true,
                     base: 'N',
