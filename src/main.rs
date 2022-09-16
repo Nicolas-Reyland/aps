@@ -1,5 +1,7 @@
 /* Parser for Algebraic Structure Proofs Lang */
 
+use std::boxed::Box;
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
@@ -11,12 +13,6 @@ use nom::{
 };
 
 mod parser_tests;
-
-#[derive(Debug, PartialEq, Clone)]
-enum Either<T1, T2> {
-    Left(T1),
-    Right(T2),
-}
 
 #[derive(Debug, PartialEq, Clone)]
 enum Atom {
@@ -37,12 +33,16 @@ struct AtomExpr {
     operators: Vec<Operator>,
 }
 
-type GeneratorElement = Either<Operator, Atom>;
+#[derive(Debug, PartialEq, Clone)]
+enum GeneratorElement {
+    GenOperator(Operator),
+    GenAtom(Atom),
+}
 
 #[derive(Debug, PartialEq, Clone)]
 struct GeneratorExpr {
     elements: Vec<GeneratorElement>,
-    iterator: Atom,
+    iterator: Box<Atom>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -164,7 +164,7 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(inpu
 }
 
 // generator_expr : '$' sp (op | atom)+ '$' sp '#' sp (atom_symbol | special_symbol)
-fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, GeneratorExpr, E> {
+fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "generator expr",
         map(
@@ -173,8 +173,8 @@ fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &
                     sp_terminated!(char('$')),
                     many1(
                         alt((
-                            map(op_p, GeneratorElement::Left),
-                            map(atom_p, GeneratorElement::Right),
+                            map(op_p, GeneratorElement::GenOperator),
+                            map(atom_p, GeneratorElement::GenAtom),
                         ))
                     )
                 ),
@@ -186,7 +186,9 @@ fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &
                     )
                 )
             )),
-            |(elements, iterator)| GeneratorExpr { elements, iterator }
+            |(elements, iterator)| -> Atom {
+                Atom::Generator(GeneratorExpr { elements, iterator: Box::new(iterator) })
+            }
         )
     )(input)
 }
@@ -427,7 +429,7 @@ fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> I
 
 
 fn main() {
-    let input: &'static str = "K :: ;;";
+    let input: &'static str = "";
     print!(
         "parsing result:\n{:#?}\n",
         root::<(&str, ErrorKind)>(input)

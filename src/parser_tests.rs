@@ -174,3 +174,48 @@ fn test_k_def_p() {
         )
     )
 }
+
+#[test]
+fn test_generator_expr_p() {
+    assert_eq!(
+        generator_expr_p::<(&str, ErrorKind)>(
+            "$ * A + B $ # C "
+        ),
+        Ok(
+            (
+                "",
+                Atom::Generator(
+                    GeneratorExpr {
+                        elements: vec![
+                            GeneratorElement::GenOperator(
+                                Operator {
+                                    op: '*',
+                                },
+                            ),
+                            GeneratorElement::GenAtom(
+                                Atom::Value(
+                                    'A',
+                                ),
+                            ),
+                            GeneratorElement::GenOperator(
+                                Operator {
+                                    op: '+',
+                                },
+                            ),
+                            GeneratorElement::GenAtom(
+                                Atom::Value(
+                                    'B',
+                                ),
+                            ),
+                        ],
+                        iterator: Box::new(
+                            Atom::Value(
+                                'C',
+                            )
+                        ),
+                    },
+                ),
+            ),
+        )
+    )
+}
