@@ -313,7 +313,7 @@ fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -
 }
 
 
-/// atom : atom_symbol | speical_symbol | parenthesized_atom | gen_expr
+/// atom : atom_symbol | special_symbol | parenthesized_atom | gen_expr
 fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "atom",
