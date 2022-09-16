@@ -8,7 +8,7 @@ use nom::{
     character::{complete::{char, one_of, satisfy}},
     combinator::{map, opt, value, recognize},
     error::{context, ContextError, ErrorKind, ParseError},
-    multi::{many0, fold_many0, many1},
+    multi::{many0, many1},
     sequence::{preceded, terminated, tuple}, IResult,
 };
 
@@ -46,6 +46,12 @@ struct GeneratorExpr {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+struct BraceGroup {
+    operator: Operator,
+    properties: Vec<AlgebraicProperty>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 struct AlgebraicProperty {
     atom_expr_left: AtomExpr,
     atom_expr_right: AtomExpr,
@@ -69,8 +75,8 @@ struct KProperty {
 #[derive(Debug, PartialEq)]
 enum AlgebraicObject<'ao> {
     KProperty(KProperty),
+    PropertyGroup(BraceGroup),
     Function(AlgebraicFunction<'ao>),
-    Property(AlgebraicProperty),
 }
 
 macro_rules! sp_preceded {
@@ -205,25 +211,22 @@ fn end_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str
 
 
 /// definition : brace_def | fn_def | k_def
-fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
+fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicObject, E> {
     context(
         "definition",
         terminated(
             alt((
                 map(
+                    k_def_p,
+                    AlgebraicObject::KProperty
+                ),
+                map(
                     brace_def_p,
-                    |properties| properties
-                        .iter()
-                        .map(|property| AlgebraicObject::Property(property.clone()))
-                        .collect()
+                    AlgebraicObject::PropertyGroup
                 ),
                 map(
                     fn_def_p,
-                    |fn_def| vec![AlgebraicObject::Function(fn_def)]
-                ),
-                map(
-                    k_def_p,
-                    |k_def| vec![AlgebraicObject::KProperty(k_def)]
+                    AlgebraicObject::Function
                 ),
             )),
             sp_p
@@ -232,7 +235,7 @@ fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i s
 }
 
 /// brace_def : (op | _ sp) def '{' sp property_list '}' sp
-fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicProperty>, E> {
+fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, BraceGroup, E> {
     context(
         "brace def",
         map(
@@ -251,7 +254,7 @@ fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i st
                 property_list_p,
                 sp_terminated!(char('}')),
             )),
-            |(_op, _, _, properties, _)| properties
+            |(operator, _, _, properties, _)| BraceGroup { operator, properties }
         )
     )(input)
 }
@@ -416,13 +419,8 @@ fn k_group_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str)
 fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject<'i>>, E> {
     context(
         "all",
-        fold_many0(
-            sp_preceded!(definition_p),
-            Vec::new,
-            |mut acc: Vec<AlgebraicObject>, mut item| {
-                acc.append(&mut item);
-                acc
-            }
+        many0(
+            sp_preceded!(definition_p)
         )
     )(input)
 }

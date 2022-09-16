@@ -73,44 +73,49 @@ fn test_brace_def_p() {
         Ok(
             (
                 "",
-                vec![
-                    AlgebraicProperty {
-                        atom_expr_left: AtomExpr {
-                            atoms: vec![
-                                Atom::Value(
-                                    'A',
-                                ),
-                            ],
-                            operators: vec![],
-                        },
-                        atom_expr_right: AtomExpr {
-                            atoms: vec![
-                                Atom::Value(
-                                    'A',
-                                ),
-                            ],
-                            operators: vec![],
-                        },
+                BraceGroup {
+                    operator: Operator {
+                        op: '+',
                     },
-                    AlgebraicProperty {
-                        atom_expr_left: AtomExpr {
-                            atoms: vec![
-                                Atom::Value(
-                                    'B',
-                                ),
-                            ],
-                            operators: vec![],
+                    properties: vec![
+                        AlgebraicProperty {
+                            atom_expr_left: AtomExpr {
+                                atoms: vec![
+                                    Atom::Value(
+                                        'A',
+                                    ),
+                                ],
+                                operators: vec![],
+                            },
+                            atom_expr_right: AtomExpr {
+                                atoms: vec![
+                                    Atom::Value(
+                                        'A',
+                                    ),
+                                ],
+                                operators: vec![],
+                            },
                         },
-                        atom_expr_right: AtomExpr {
-                            atoms: vec![
-                                Atom::Value(
-                                    'C',
-                                ),
-                            ],
-                            operators: vec![],
+                        AlgebraicProperty {
+                            atom_expr_left: AtomExpr {
+                                atoms: vec![
+                                    Atom::Value(
+                                        'B',
+                                    ),
+                                ],
+                                operators: vec![],
+                            },
+                            atom_expr_right: AtomExpr {
+                                atoms: vec![
+                                    Atom::Value(
+                                        'C',
+                                    ),
+                                ],
+                                operators: vec![],
+                            },
                         },
-                    },
-                ],
+                    ],
+                },
             ),
         )
     )
