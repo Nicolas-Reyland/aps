@@ -26,7 +26,6 @@ struct Operator {
 
 #[derive(Debug, PartialEq, Clone)]
 struct AtomExpr {
-    // e.g. A + (B + C)
     atoms: Vec<Atom>,
     operators: Vec<Operator>,
 }
@@ -35,7 +34,7 @@ struct AtomExpr {
 struct AlgebraicProperty {
     atom_expr_left: AtomExpr,
     atom_expr_right: AtomExpr,
-    // equality: Equality<'ap>
+    // relation: Relation (=, <=>, =>, >, <, ...)
 }
 
 #[derive(Debug, PartialEq)]
@@ -71,11 +70,13 @@ macro_rules! sp_terminated {
     };
 }
 
+// sp : [ \t\r\n]*
 fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     let chars = " \t\r\n";
     take_while(move |c| chars.contains(c))(input)
 }
 
+// op : [+-*/.@^] sp
 fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
     let chars = "+-*/.@^";
     map(
@@ -84,6 +85,7 @@ fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator
     )(input)
 }
 
+// fn_name : [a-z_][a-z0-9_] sp
 fn fn_name_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     recognize(
         sp_terminated!(
@@ -97,14 +99,17 @@ fn fn_name_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i
     )(input)
 }
 
+// def : '::' sp
 fn def_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     sp_terminated!(tag("::"))(input)
 }
 
+// fn_def : '->' sp
 fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     sp_terminated!(tag("->"))(input)
 }
 
+// atom_symbol : [A-Z] sp
 fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
         sp_terminated!(
@@ -114,6 +119,7 @@ fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str,
     )(input)
 }
 
+// special_symbol : [0-9] sp
 fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
         sp_terminated!(
@@ -123,6 +129,7 @@ fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i s
     )(input)
 }
 
+// parenthesized_atom : '(' atom_expr ')' sp
 fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "parenthesized atom",
@@ -141,15 +148,18 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(inpu
     )(input)
 }
 
+// equ : '=' sp
 fn equ_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     sp_terminated!(recognize(char('=')))(input)
 }
 
+// end : ';;' sp
 fn end_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     sp_terminated!(tag(";;"))(input)
 }
 
 
+// definition : brace_def | fn_def | k_def
 fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
     context(
         "definition",
@@ -176,6 +186,7 @@ fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i s
     )(input)
 }
 
+// brace_def : (op | _ sp) def '{' sp property_list '}' sp
 fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicProperty>, E> {
     context(
         "brace def",
@@ -200,7 +211,7 @@ fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i st
     )(input)
 }
 
-// TESTED
+// fn_def : fn_name def atom_expr fn_def atom_expr end
 fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicFunction<'i>, E> {
     context(
         "fn def",
@@ -218,6 +229,7 @@ fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) 
     )(input)
 }
 
+// k_def : 'K' sp def ('?'? k_group | '?')
 fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, KProperty, E> {
     context(
         "K def",
@@ -225,10 +237,15 @@ fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -
             tuple((
                 sp_terminated!(char('K')),
                 def_p,
-                opt(value(true, char('?'))),
-                opt(k_group_p),
+                alt((
+                    tuple((
+                        opt(value(true, char('?'))),
+                        map(k_group_p, Some),
+                    )),
+                    value((Some(true), Some(('K', 1))), char('?'))
+                ))
             )),
-            |(_, _, c, group)| {
+            |(_, _, (c, group))| {
                 let undefined_property = match c {
                     Some(v) => v, // should be true
                     None => false
@@ -251,6 +268,7 @@ fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -
 }
 
 
+// atom : atom_symbol | speical_symbol | parenthesized_atom
 fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "atom",
@@ -278,6 +296,7 @@ fn atom_expr_map_f<'ae>((first, rest): (Atom, Vec<(Operator, Atom)>)) -> AtomExp
 }
 
 
+// atom_expr : atom (op atom)*
 fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AtomExpr, E> {
     context(
         "atom expr",
@@ -296,6 +315,7 @@ fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i st
     )(input)
 }
 
+// property_list : (property sp)*
 fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicProperty>, E> {
     context(
         "property list",
@@ -305,6 +325,7 @@ fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'
     )(input)
 }
 
+// property : atom_expr equ atom_expr end
 fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicProperty, E> {
     context(
         "property",
@@ -324,6 +345,7 @@ fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str
 }
 
 
+// k_group : [A-Z] [0-9]? sp
 fn k_group_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, (char, i8), E> {
     context(
         "k group",
@@ -344,6 +366,7 @@ fn k_group_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str)
     )(input)
 }
 
+// root : (sp definition)*
 fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject<'i>>, E> {
     context(
         "all",
@@ -360,7 +383,7 @@ fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> I
 
 
 fn main() {
-    let input: &'static str = "+ :: {\n    A + B = B + A ;; \n}-::{A=A;;}\n";
+    let input: &'static str = "K :: ;;";
     print!(
         "parsing result:\n{:#?}\n",
         root::<(&str, ErrorKind)>(input)
