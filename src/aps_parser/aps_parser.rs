@@ -31,7 +31,7 @@ impl PartialEq for Atom {
             (Self::Parenthesized(expr_a), Self::Parenthesized(expr_b)) => expr_a == expr_b,
             (Self::Value(val_a), Self::Value(val_b)) => val_a == val_b,
             (Self::Special(spe_a), Self::Special(spe_b)) => spe_a == spe_b,
-            (Self::Generator(_), Self::Generator(_)) => panic!("Comparing generators :\n{:#?}\n AND \n{:#?}\n", self, other),
+            (Self::Generator(_), Self::Generator(_)) => panic!("Comparing generators :\n{:#?}\nAND\n{:#?}\n", self, other),
             (Self::Extension, Self::Extension) => true,
             _ => false,
         }
