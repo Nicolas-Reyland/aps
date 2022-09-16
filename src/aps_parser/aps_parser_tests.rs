@@ -5,7 +5,7 @@ use super::*;
 fn test_atom_expr_p() {
     assert_eq!(
         atom_expr_p::<(&str, ErrorKind)>(
-            "A + 0 * (C ^ (2 / Q))"
+            "A + 0 * (C ^ (2 / Q @ ...))"
         ),
         Ok(
             (
@@ -33,10 +33,14 @@ fn test_atom_expr_p() {
                                                 Atom::Value(
                                                     'Q',
                                                 ),
+                                                Atom::Extension
                                             ],
                                             operators: vec![
                                                 Operator {
                                                     op: '/',
+                                                },
+                                                Operator {
+                                                    op: '@',
                                                 },
                                             ],
                                         },

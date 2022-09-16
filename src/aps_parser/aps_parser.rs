@@ -21,6 +21,7 @@ pub enum Atom {
     Parenthesized(AtomExpr),
     Value(char),
     Special(char),
+    Extension,
     Generator(GeneratorExpr),
 }
 
@@ -99,9 +100,9 @@ fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str,
     take_while(move |c| chars.contains(c))(input)
 }
 
-/// op : [+-*/.@^] sp
+/// op : [+-*/@^] sp
 fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
-    let chars = "+-*/.@^";
+    let chars = "+-*/@^";
     map(
         sp_terminated!(one_of(chars)),
         |op| Operator { op }
@@ -132,13 +133,16 @@ fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i st
     sp_terminated!(tag("->"))(input)
 }
 
-/// atom_symbol : [A-Z] sp
+/// atom_symbol : ([A-Z] | '...') sp
 fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
-    map(
-        sp_terminated!(
-            satisfy(|c| c.is_alphabetic() && c.is_uppercase())
-        ),
-        Atom::Value
+    sp_terminated!(
+        alt((
+            map(
+                satisfy(|c| c.is_alphabetic() && c.is_uppercase()),
+                Atom::Value
+            ),
+            value(Atom::Extension, tag("..."))
+        ))
     )(input)
 }
 
