@@ -37,8 +37,8 @@ ATOM_EXPR		:=		ATOM (OP ATOM)*
 PROPERTY_LIST	:=		(PROPERTY SP)*
 // property
 PROPERTY		:=		ATOM_EXPR EQU (ATOM_EXPR | GEN_EXPR)+ END
-// generator EXPR
-GEN_EXPR		:=		'$' (OP | ATOM)* '$' ('#' ATOM_SYMBOL)?
+// generator expression
+GEN_EXPR		:=		'$' SP (OP | ATOM)+ '$' SP '#' SP ATOM_SYMBOL
 
 // K Group
 K_GROUP         :=      [A-Z] [0-9]*

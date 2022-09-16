@@ -6,17 +6,24 @@ use nom::{
     character::{complete::{char, one_of, satisfy}},
     combinator::{map, opt, value, recognize},
     error::{context, ContextError, ErrorKind, ParseError},
-    multi::{many0, fold_many0},
+    multi::{many0, fold_many0, many1},
     sequence::{preceded, terminated, tuple}, IResult,
 };
 
 mod parser_tests;
 
 #[derive(Debug, PartialEq, Clone)]
+enum Either<T1, T2> {
+    Left(T1),
+    Right(T2),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 enum Atom {
     Parenthesized(AtomExpr),
     Value(char),
     Special(char),
+    Generator(GeneratorExpr),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -28,6 +35,14 @@ struct Operator {
 struct AtomExpr {
     atoms: Vec<Atom>,
     operators: Vec<Operator>,
+}
+
+type GeneratorElement = Either<Operator, Atom>;
+
+#[derive(Debug, PartialEq, Clone)]
+struct GeneratorExpr {
+    elements: Vec<GeneratorElement>,
+    iterator: Atom,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -144,6 +159,34 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(inpu
                 )
             ),
             Atom::Parenthesized
+        )
+    )(input)
+}
+
+// generator_expr : '$' sp (op | atom)+ '$' sp '#' sp (atom_symbol | special_symbol)
+fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, GeneratorExpr, E> {
+    context(
+        "generator expr",
+        map(
+            tuple((
+                preceded(
+                    sp_terminated!(char('$')),
+                    many1(
+                        alt((
+                            map(op_p, GeneratorElement::Left),
+                            map(atom_p, GeneratorElement::Right),
+                        ))
+                    )
+                ),
+                preceded(
+                    sp_terminated!(char('$')),
+                    preceded(
+                        sp_terminated!(char('#')),
+                        alt((atom_symbol_p, special_symbol_p))
+                    )
+                )
+            )),
+            |(elements, iterator)| GeneratorExpr { elements, iterator }
         )
     )(input)
 }
@@ -268,7 +311,7 @@ fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -
 }
 
 
-// atom : atom_symbol | speical_symbol | parenthesized_atom
+// atom : atom_symbol | speical_symbol | parenthesized_atom | gen_expr
 fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "atom",
@@ -276,6 +319,7 @@ fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) ->
             atom_symbol_p,
             special_symbol_p,
             parenthesized_atom_p,
+            generator_expr_p,
         ))
     )(input)
 }
