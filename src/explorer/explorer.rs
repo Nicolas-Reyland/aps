@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap};
 
-use crate::aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator, ApsParserKind, BraceGroup, AlgebraicObject};
+use crate::aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator};
 
 #[derive(Debug, PartialEq, Hash)]
 pub enum Either<T1, T2> {
@@ -16,11 +16,12 @@ pub struct ExprGraph {
     max_depth: u8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub struct ExprNode {
     atom_expr: aps_parser::AtomExpr,
     neighbours: Vec<ExprNode>,
     depth: i8,
+    index: i8,
 }
 
 impl PartialEq for ExprNode {
@@ -42,6 +43,7 @@ pub fn init_graph(expr: AtomExpr) -> ExprGraph {
         atom_expr: expr,
         neighbours: Vec::new(),
         depth: 0,
+        index: 0,
     };
     let graph = ExprGraph {
         nodes: vec![base_node],
@@ -60,7 +62,7 @@ pub fn explore_graph(
     graph: &mut ExprGraph,
     properties: Vec<AlgebraicProperty>,
     functions: Vec<AlgebraicFunction>,
-) -> u8 {
+) -> bool {
     let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
     for i in 0..graph.nodes.len() {
         let node = graph.nodes[i].clone();
@@ -72,25 +74,28 @@ pub fn explore_graph(
                         atom_expr: new_expr,
                         neighbours: vec![],
                         depth: -1,
+                        index: -1,
                     }
                 )),
                 None => continue,
             }
         }
     }
-    let mut num_new_nodes: u8 = 0;
     let mut at_least_one_new_node = false;
+    let mut new_node_index = graph.nodes.len() as i8;
     for (mut src_node, mut new_node) in new_nodes {
         if ! graph.nodes.contains(&new_node) {
+            println!("New node: {:?}", new_node);
             at_least_one_new_node = true;
-            // increment the number of new nodes
-            num_new_nodes += 1;
             // add source node to the new node's neighbours
             new_node.neighbours.push(src_node.clone());
             // add the new node to the source node's neighbours
             src_node.neighbours.push(new_node.clone());
             // set the depth of the new node
             new_node.depth = src_node.depth + 1;
+            // set the index of the new node
+            new_node.index = new_node_index;
+            new_node_index += 1;
             // add new node to graph
             graph.nodes.push(new_node)
         }
@@ -98,7 +103,36 @@ pub fn explore_graph(
     if at_least_one_new_node {
         graph.max_depth += 1;
     }
-    num_new_nodes
+    // has the graph at least one new node ?
+    at_least_one_new_node
+}
+
+pub fn print_graph_dot_format(graph: &ExprGraph) -> () {
+    println!("/* DOT FORMAT START */");
+    // start printing the graph
+    print!("digraph G {{\n");
+    for node in &graph.nodes {
+        print_node_dot_format(node);
+    }
+    print!("}}\n");
+    println!("/* DOT FORMAT END */");
+}
+
+fn print_node_dot_format(node: &ExprNode) -> () {
+    // start printing definition line
+    print!("\t{:?} [label=\"", node.index);
+    // print label of node
+    print!("{}", node.atom_expr);
+    // end printing definition line
+    print!("\"]\n");
+
+    // start printing neighbours
+    for neighbour in &node.neighbours {
+        if node.index < neighbour.index {
+            print!("\t{:?} -> {:?}\n", node.index, neighbour.index)
+        }
+    }
+    print!("\n");
 }
 
 fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: &Vec<AlgebraicFunction>) -> Option<AtomExpr> {
@@ -153,6 +187,9 @@ fn atom_expressions_match(
                     operators: src_expr.operators[i+1..].to_vec()
                 }
             ));
+            if i + 1 != num_p_atoms {
+                return None
+            }
             return Some(mappings)
         }
         match left_to_right_match(atom_a, atom_b, functions) {
@@ -191,6 +228,9 @@ fn atom_expressions_match(
         }
         // go to next (operator, atom) pair
         i += 1;
+    }
+    if i != num_src_atoms {
+        return None
     }
     Some(mappings)
 }
@@ -283,7 +323,7 @@ fn generate_new_expression(
 
 #[test]
 fn test() {
-    let src_expr = match aps_parser::atom_expr_p::<ApsParserKind>(
+    let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
         "(X + Y) + Z"
     ) {
         Ok(("", expr)) => expr,
@@ -294,12 +334,12 @@ fn test() {
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
     };
-    let property = match aps_parser::root::<ApsParserKind>(
+    let property = match aps_parser::root::<aps_parser::ApsParserKind>(
         "+ :: { (A + B) + C = A + (B + C) ;; }"
     ) {
         Ok(("", parsed)) => match parsed.first().unwrap() {
-            AlgebraicObject::PropertyGroup(
-                BraceGroup { properties, operator: _ }
+            aps_parser::AlgebraicObject::PropertyGroup(
+                aps_parser::BraceGroup { properties, operator: _ }
             ) => properties.first().unwrap().clone(),
             _ => panic!("No a brace group:\n{:#?}\n", parsed),
         },

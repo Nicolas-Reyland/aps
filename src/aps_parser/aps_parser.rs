@@ -1,6 +1,6 @@
 // APS Lang Parser
 
-use std::{boxed::Box};
+use std::{boxed::Box, fmt};
 
 use nom::{
     branch::alt,
@@ -55,9 +55,27 @@ impl PartialEq for Atom {
     }
 }
 
+impl fmt::Display for Atom {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Atom::Parenthesized(x) => write!(f, "({})", x),
+            Atom::Value(x) => write!(f, "{}", x),
+            Atom::Special(x) => write!(f, "{}", x),
+            Atom::Extension => write!(f, "..."),
+            Atom::Generator(x) => write!(f, "{}", x),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct Operator {
     op: char,
+}
+
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.op)
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq)]
@@ -83,16 +101,46 @@ impl PartialEq for AtomExpr {
     }
 }
 
+impl fmt::Display for AtomExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let num_operators = self.operators.len();
+        write!(f, "{}", self.atoms[0])?;
+        for i in 0..num_operators {
+            write!(f, " {} {}", self.operators[i], self.atoms[i + 1])?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum GeneratorElement {
     GenOperator(Operator),
     GenAtom(Atom),
 }
 
+impl fmt::Display for GeneratorElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GeneratorElement::GenOperator(x) => write!(f, "{}", x),
+            GeneratorElement::GenAtom(x) => write!(f, "{}", x),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GeneratorExpr {
     elements: Vec<GeneratorElement>,
     iterator: Box<Atom>,
+}
+
+impl fmt::Display for GeneratorExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "$ ")?;
+        for element in &self.elements {
+            write!(f, "{} ", element)?;
+        }
+        write!(f, "$ # {}", self.iterator)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -108,7 +156,7 @@ pub struct AlgebraicProperty {
     // relation: Relation (=, <=>, =>, >, <, ...)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct AlgebraicFunction<'af> {
     name: &'af str,
     atom_expr_left: AtomExpr,

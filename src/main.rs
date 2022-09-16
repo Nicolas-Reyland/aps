@@ -1,6 +1,9 @@
 /* Parser for Algebraic Proofing System Language */
 
-use std::fs;
+use std::{fs};
+
+use aps_parser::{AlgebraicProperty, AlgebraicFunction, KProperty, AlgebraicObject};
+use explorer::{explore_graph, print_graph_dot_format};
 
 #[path = "aps_parser/aps_parser.rs"] mod aps_parser;
 #[path = "explorer/explorer.rs"] mod explorer;
@@ -10,22 +13,44 @@ fn main() {
         Ok(content) => content,
         Err(err) => panic!("{}", err)
     };
-    let algebraic_objects = aps_parser::root::<aps_parser::ApsParserKind>(
+    // parse input rules
+    let alg_objects = match aps_parser::root::<aps_parser::ApsParserKind>(
         &input_str
-    );
-    let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
-        "(A + B) + C + D + E"
     ) {
         Ok(("", expr)) => expr,
         Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
+            "Failed to parse everything:\n'{}'\nParsed (root) :\n{:#?}\n",
             rest,
             parsed
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
     };
+    // parse input expression
+    let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
+        "(A + B) + C + D + E"
+    ) {
+        Ok(("", expr)) => expr,
+        Ok((rest, parsed)) => panic!(
+            "Failed to parse whole expression:\n'{}'\nParsed (expr) :\n{:#?}\n",
+            rest,
+            parsed
+        ),
+        Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
+    };
+    // create graph and stuff
+    let (
+        properties,
+        functions,
+        _k_properties,
+    ) = split_algebraic_objects(alg_objects);
     let mut graph = explorer::init_graph(src_expr);
-    
+    // explore the graph a few times
+    for _ in 0..3 {
+        print_graph_dot_format(&graph);
+        explore_graph(&mut graph, properties.clone(), functions.clone());
+    }
+    print_graph_dot_format(&graph);
+
 
 
 
@@ -45,3 +70,20 @@ fn main() {
     )
     */
 }
+
+fn split_algebraic_objects(
+    alg_objects: Vec<AlgebraicObject>
+) -> (Vec<AlgebraicProperty>, Vec<AlgebraicFunction>, Vec<KProperty>) {
+    let mut properties: Vec<AlgebraicProperty> = Vec::new();
+    let mut functions: Vec<AlgebraicFunction> = Vec::new();
+    let mut k_properties: Vec<KProperty> = Vec::new();
+    for obj in alg_objects {
+        match obj {
+            AlgebraicObject::KProperty(kp) => k_properties.push(kp),
+            AlgebraicObject::PropertyGroup(bg) => properties.extend(bg.properties),
+            AlgebraicObject::Function(f) => functions.push(f),
+        }
+    }
+    (properties, functions, k_properties)
+}
+
