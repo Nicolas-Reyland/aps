@@ -176,11 +176,23 @@ pub struct AlgebraicFunction {
     atom_expr_right: AtomExpr,
 }
 
+impl fmt::Display for AlgebraicFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} :: {} = {}", self.name, self.atom_expr_left, self.atom_expr_right)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct KProperty {
     undefined_property: bool,
     base: char,
     dim: i8,
+}
+
+impl fmt::Display for KProperty {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "K :: {}{}{}", if self.undefined_property {"?"} else {""}, self.base, self.dim)
+    }
 }
 
 #[derive(Debug, Clone)]

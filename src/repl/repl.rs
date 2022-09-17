@@ -81,8 +81,32 @@ pub fn repl(context: ReplContext) {
             )
             .about("Add a definition to the current context"),
             rule_callback
+        )
+        .with_command(
+            Command::new("context")
+            .about("Show the current context"),
+            context_callback
         );
     repl.run().unwrap();
+}
+
+fn context_callback(_: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
+    let mut content = " Properties :\n".to_owned();
+    // properties
+    for property in &context.properties {
+        content.push_str(&format!(" | {}\n", property));
+    }
+    // functions
+    content.push_str("\n Functions :\n");
+    for function in &context.functions {
+        content.push_str(&format!(" | {}\n", function));
+    }
+    // k properties
+    content.push_str("\n K Properties :\n");
+    for k_property in &context.k_properties {
+        content.push_str(&format!(" | {}\n", k_property));
+    }
+    Ok(Some(content))
 }
 
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
@@ -170,7 +194,7 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) {
     // read file
     let content = fs::read_to_string(filename).unwrap();
     let content_box: Box<String> = Box::new(content);
-    // parse input rules
+    // parse input context
     let alg_objects = match aps_parser::root::<aps_parser::ApsParserKind>(
         &content_box
     ) {
