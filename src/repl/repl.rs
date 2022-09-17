@@ -78,19 +78,20 @@ pub fn repl(context: ReplContext) {
             .arg(Arg::with_name("body")
                 .required(true)
                 .min_values(1)
+                .allow_hyphen_values(true)
             )
             .about("Add a definition to the current context"),
             rule_callback
         )
         .with_command(
-            Command::new("context")
-            .about("Show the current context"),
-            context_callback
+            Command::new("ctx")
+            .about("Print the current context"),
+            ctx_callback
         );
     repl.run().unwrap();
 }
 
-fn context_callback(_: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
+fn ctx_callback(_: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     let mut content = " Properties :\n".to_owned();
     // properties
     for property in &context.properties {

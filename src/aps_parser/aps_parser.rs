@@ -22,6 +22,7 @@ pub enum Atom {
     Value(char),
     Special(char),
     Extension,
+    FunctionCall((String, AtomExpr)),
     Generator(GeneratorExpr),
 }
 
@@ -43,6 +44,10 @@ impl PartialEq for Atom {
                 Self::Generator(b)
             ) => a == b,
             (
+                Self::FunctionCall(fn_call_a),
+                Self::FunctionCall(fn_call_b)
+            ) => fn_call_a == fn_call_b,
+            (
                 Self::Extension,
                 Self::Extension
             ) => true,
@@ -62,6 +67,7 @@ impl fmt::Display for Atom {
             Atom::Value(x) => write!(f, "{}", x),
             Atom::Special(x) => write!(f, "{}", x),
             Atom::Extension => write!(f, "..."),
+            Atom::FunctionCall((name, x)) => write!(f, "{}({})", name, x),
             Atom::Generator(x) => write!(f, "{}", x),
         }
     }
@@ -178,7 +184,7 @@ pub struct AlgebraicFunction {
 
 impl fmt::Display for AlgebraicFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} :: {} = {}", self.name, self.atom_expr_left, self.atom_expr_right)
+        write!(f, "{} :: {} -> {}", self.name, self.atom_expr_left, self.atom_expr_right)
     }
 }
 
@@ -291,6 +297,28 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(inpu
                 )
             ),
             parenthesized_atom
+        )
+    )(input)
+}
+
+/// fn_call_p : fn_name '(' atom_expr ')' sp
+fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str,  Atom, E> {
+    context(
+        "function call atom",
+        map(
+            sp_terminated!(
+                tuple((
+                    fn_name_p,
+                    preceded(
+                        char('('),
+                        terminated(
+                            atom_expr_p,
+                            char(')')
+                        )
+                    )
+                ))
+            ),
+            |(fn_name, expr)| Atom::FunctionCall((fn_name.to_string(), expr))
         )
     )(input)
 }
@@ -448,7 +476,7 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i st
 }
 
 
-/// atom : atom_symbol | special_symbol | parenthesized_atom | gen_expr
+/// atom : atom_symbol | special_symbol | parenthesized_atom | fn_call_p | gen_expr
 fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "atom",
@@ -456,6 +484,7 @@ fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) ->
             atom_symbol_p,
             special_symbol_p,
             parenthesized_atom_p,
+            fn_call_p,
             generator_expr_p,
         ))
     )(input)

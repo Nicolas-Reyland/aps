@@ -4,7 +4,7 @@ use super::*;
 #[test]
 fn test_atom_expr_p() {
     assert_eq!(
-        atom_expr_p::<(&str, ErrorKind)>(
+        atom_expr_p::<ApsParserKind>(
             "A + 0 * (C ^ (2 / Q @ ...))"
         ),
         Ok(
@@ -71,7 +71,7 @@ fn test_atom_expr_p() {
 #[test]
 fn test_brace_def_p() {
     assert_eq!(
-        brace_def_p::<(&str, ErrorKind)>(
+        brace_def_p::<ApsParserKind>(
             "+ :: { A = A ;; B = C ;; } "
         ),
         Ok(
@@ -128,14 +128,14 @@ fn test_brace_def_p() {
 #[test]
 fn test_fn_def_p() {
     assert_eq!(
-        fn_def_p::<(&str, ErrorKind)>(
+        fn_def_p::<ApsParserKind>(
             "square :: A -> A ^ 2 ;; "
         ),
         Ok(
             (
                 "",
                 AlgebraicFunction {
-                    name: "square ",
+                    name: "square ".to_string(),
                     atom_expr_left: AtomExpr {
                         atoms: vec![
                             Atom::Value(
@@ -168,7 +168,7 @@ fn test_fn_def_p() {
 #[test]
 fn test_k_def_p() {
     assert_eq!(
-        k_def_p::<(&str, ErrorKind)>(
+        k_def_p::<ApsParserKind>(
             "K :: ?N5 ;; "
         ),
         Ok(
@@ -187,7 +187,7 @@ fn test_k_def_p() {
 #[test]
 fn test_generator_expr_p() {
     assert_eq!(
-        generator_expr_p::<(&str, ErrorKind)>(
+        generator_expr_p::<ApsParserKind>(
             "$ * A + B $ # C "
         ),
         Ok(
@@ -225,6 +225,46 @@ fn test_generator_expr_p() {
                     },
                 ),
             ),
+        )
+    )
+}
+
+#[test]
+fn test_fn_call_p() {
+    assert_eq!(
+        fn_call_p::<ApsParserKind>(
+            "exp(A ^ 2 - 4) "
+        ),
+        Ok(
+            (
+                "",
+                Atom::FunctionCall(
+                    (
+                        "exp".to_string(),
+                        AtomExpr {
+                            atoms: vec![
+                                Atom::Value(
+                                    'A',
+                                ),
+                                Atom::Special(
+                                    '2',
+                                ),
+                                Atom::Special(
+                                    '4',
+                                ),
+                            ],
+                            operators: vec![
+                                Operator {
+                                    op: '^',
+                                },
+                                Operator {
+                                    op: '-',
+                                },
+                            ]
+                        }
+                    )
+                )
+            )
         )
     )
 }

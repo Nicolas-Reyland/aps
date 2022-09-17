@@ -344,12 +344,14 @@ fn left_to_right_match(
         Atom::Value(_) => match atom_a {
             Atom::Value(_) |
             Atom::Special(_) |
-            Atom::Parenthesized(_) => (true, None),
+            Atom::Parenthesized(_) |
+            Atom::FunctionCall(_) => (true, None),
             _ => todo!()
             
         },
         Atom::Special(_) => (atom_a == atom_b, None),
         Atom::Extension => todo!(),
+        Atom::FunctionCall(_) => todo!(),
         Atom::Generator(_) => todo!(),
     }
 }
