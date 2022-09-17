@@ -1,17 +1,29 @@
 // 
 
-use crate::{aps_parser::{self, AtomExpr, AlgebraicObject}, explorer::{init_graph, ExprGraph, ExprNode, explore_graph}, MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH};
+use crate::{
+    aps_parser::{
+        AtomExpr,
+        AlgebraicProperty,
+        AlgebraicFunction,
+        KProperty
+    },
+    explorer::{
+        init_graph,
+        ExprGraph,
+        ExprNode,
+        explore_graph
+    },
+    MAX_GRAPH_EXPLORATION_DEPTH,
+    MAX_NODES_PER_GRAPH
+};
 
 pub fn solve_equality(
-    definitions: Vec<AlgebraicObject>,
+    properties: Vec<AlgebraicProperty>,
+    functions: Vec<AlgebraicFunction>,
+    _k_properties: Vec<KProperty>,
     left_expression: &AtomExpr,
     right_expression: &AtomExpr
 ) -> Option<Vec<AtomExpr>> {
-    let (
-        properties,
-        functions,
-        _k_properties,
-    ) = aps_parser::split_algebraic_objects(definitions);
     let mut left = init_graph(left_expression.clone());
     let mut right = init_graph(right_expression.clone());
     let mut depth: u8 = 0;
