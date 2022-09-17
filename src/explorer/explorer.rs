@@ -140,39 +140,43 @@ pub fn explore_graph(
     at_least_one_new_node
 }
 
-pub fn print_graph_dot_format(graph: &ExprGraph) -> () {
-    println!("/* DOT FORMAT START */");
+pub fn print_graph_dot_format(graph: &ExprGraph) -> String {
+    let mut content = String::new();
+    content.push_str("/* DOT FORMAT START */\n");
     // start printing the graph
-    print!("digraph G {{\n\trankdir = LR;\n\tedge [minlen=3.5];\n");
+    content.push_str("digraph G {{\n\trankdir = LR;\n\tedge [minlen=3.5];\n");
     for node in &graph.nodes {
-        print_node_dot_format(node);
+        content.push_str(&print_node_dot_format(node));
     }
-    print!("}}\n");
-    println!("/* DOT FORMAT END */");
+    content.push_str("}}\n");
+    content.push_str("/* DOT FORMAT END */\n");
+    content
 }
 
-fn print_node_dot_format(node: &ExprNode) -> () {
+fn print_node_dot_format(node: &ExprNode) -> String {
+    let mut content = String::new();
     // start printing definition line
-    print!(
+    content.push_str(&format!(
         "\t{} [shape=record color={} label=\"",
         node.index,
         if node.index == 0 {"red"} else {"blue"}
-    );
+    ));
     // print label of node
-    print!("{}", node.atom_expr);
+    content.push_str(&format!("{}", node.atom_expr));
     // end printing definition line
-    print!("\"];\n");
+    content.push_str(&format!("\"];\n"));
 
     // start printing neighbours
     for (nb_index, neighbour) in node.neighbours.iter().enumerate() {
-        print!(
+        content.push_str(&format!(
             "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
             neighbour,
             node.index,
             node.transforms[nb_index as usize]
-        );
+        ));
     }
-    print!("\n");
+    content.push_str("\n");
+    content
 }
 
 fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: &Vec<AlgebraicFunction>) -> Vec<AtomExpr> {

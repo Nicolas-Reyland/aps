@@ -170,24 +170,24 @@ impl fmt::Display for AlgebraicProperty {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct AlgebraicFunction<'af> {
-    name: &'af str,
+pub struct AlgebraicFunction {
+    name: String,
     atom_expr_left: AtomExpr,
     atom_expr_right: AtomExpr,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct KProperty {
     undefined_property: bool,
     base: char,
     dim: i8,
 }
 
-#[derive(Debug)]
-pub enum AlgebraicObject<'ao> {
+#[derive(Debug, Clone)]
+pub enum AlgebraicObject {
     KProperty(KProperty),
     PropertyGroup(BraceGroup),
-    Function(AlgebraicFunction<'ao>),
+    Function(AlgebraicFunction),
 }
 
 macro_rules! sp_preceded {
@@ -374,7 +374,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'
 }
 
 /// fn_def : fn_name def atom_expr fn_def atom_expr end
-pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicFunction<'i>, E> {
+pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicFunction, E> {
     context(
         "fn def",
         map(
@@ -386,7 +386,11 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i s
                 atom_expr_p,
                 end_p,
             )),
-            |(name, _, atom_expr_left, _, atom_expr_right, _)| AlgebraicFunction { name, atom_expr_left, atom_expr_right }
+            |(name, _, atom_expr_left, _, atom_expr_right, _)| AlgebraicFunction {
+                name: name.to_owned(),
+                atom_expr_left,
+                atom_expr_right,
+            }
         )
     )(input)
 }
@@ -491,7 +495,7 @@ fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'
 }
 
 /// property : atom_expr equ atom_expr end
-fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicProperty, E> {
+pub fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicProperty, E> {
     context(
         "property",
         map(
@@ -532,7 +536,7 @@ fn k_group_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str)
 }
 
 /// root : (sp definition)*
-pub fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject<'i>>, E> {
+pub fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Vec<AlgebraicObject>, E> {
     context(
         "all",
         many0(
