@@ -29,6 +29,16 @@ pub struct ExprGraph {
     max_depth: u8,
 }
 
+impl fmt::Display for ExprGraph {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ExprGraph (max_depth: {}) {{\n", self.max_depth)?;
+        for node in &self.nodes {
+            write!(f, "\t{},\n", node)?;
+        }
+        write!(f, "}}")
+    }
+}
+
 type ExprNodeIndex = usize;
 
 #[derive(Debug, Clone, Hash)]
@@ -62,6 +72,10 @@ impl fmt::Display for ExprNode {
         )?;
         for neighbour in &self.neighbours {
             write!(f, "{} ", neighbour)?;
+        }
+        write!(f, "], transforms: [")?;
+        for tr in &self.transforms {
+            write!(f, "{} ", tr)?;
         }
         write!(f, "] }}")
     }

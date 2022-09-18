@@ -8,6 +8,9 @@ Todo List :
 - parallelize both graph explorations
 - use hashmaps or hashsets instead of vectors in the graph
 - optimize the shit out of everything
+- can use extensions (...) anywhere in an expression e.g.
+    * ... + A * B = ... + (A * B)
+- ExprNode 'neighbours' and 'transofrms' should only hold one element.
+    Thus, they should be renamed to 'parent' and 'transform' and be values, not lists/vectors
 
-Urgent Fix :
-- common can only be a base, and not any node ?? (check if true first)
+Urgent Fix List :

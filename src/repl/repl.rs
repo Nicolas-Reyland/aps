@@ -219,7 +219,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
     for (step_expr, step_tr) in solution.iter().skip(1) {
         solution_str.push_str(
             &format!(
-                " = {}\t|\t{}\n",
+                " = {}\t\t|\t{}\n",
                 step_expr,
                 match step_tr {
                     Some(tr) => tr.to_string(),

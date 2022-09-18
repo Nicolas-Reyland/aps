@@ -33,13 +33,19 @@ pub fn solve_equality(
         for lnode in &left.nodes {
             for rnode in &right.nodes {
                 if rnode == lnode {
-                    return Some(find_route(&left, &right, &lnode, &rnode))
+                    return Some(find_route(
+                        &left,
+                        &right,
+                        &lnode,
+                        &rnode
+                    ))
                 }
             }
         }
         // explore the graphs once each
-        if !(explore_graph(&mut left, &properties, &functions) ||
-            explore_graph(&mut right, &properties, &functions))
+        let left_has_evolved = explore_graph(&mut left, &properties, &functions);
+        let right_has_evolved = explore_graph(&mut right, &properties, &functions);
+        if !(left_has_evolved || right_has_evolved)
         {
             // one graph can evolve alone, and maybe 'join' the other
             // so we have to wait for both graphs to be 'exhausted'
@@ -87,16 +93,17 @@ fn find_route(
     // link base-node to common on the right
     let mut rroute: Vec<(AtomExpr, Option<AlgebraicProperty>)> = Vec::new();
     let mut rnode = rcommon;
+    let mut next_transform: Option<AlgebraicProperty> = None;
     while rnode.index != 0 {
         rroute.push((
             rnode.atom_expr.clone(),
-            Some(rnode.transforms.first().unwrap().clone())
+            next_transform
         ));
+        next_transform = Some(rnode.transforms.first().unwrap().clone());
         rnode = &right.nodes[*rnode.neighbours.first().unwrap()];
     }
     // push the base
-    rroute.push((rnode.atom_expr.clone(), None));
-    rroute.reverse(); // from common->base to base->common
+    rroute.push((rnode.atom_expr.clone(), next_transform));
     // add all the left route
     route.append(
         &mut lroute
@@ -104,7 +111,7 @@ fn find_route(
     // remove the common element from the right route (or we'll have it twice)
     // println!("route:\n{:#?}\n\nrroute:\n{:#?}\n", route, rroute);
     assert_eq!(
-        match rroute.pop().unwrap() {(x,_) => x},
+        match rroute.remove(0) {(x,_) => x},
         lcommon.atom_expr.clone()
     );
     route.append(
