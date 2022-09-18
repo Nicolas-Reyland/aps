@@ -413,7 +413,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'
     )(input)
 }
 
-/// fn_def : fn_name def atom_expr fn_def atom_expr end
+/// fn_def : fn_name def simple_atom_expr fn_def atom_expr end
 pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AlgebraicFunction, E> {
     context(
         "fn def",
@@ -421,7 +421,7 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i s
             tuple((
                 fn_name_p,
                 def_p,
-                atom_expr_p,
+                simple_atom_expr_p,
                 fn_def_symbol_p,
                 atom_expr_p,
                 end_p,
@@ -476,7 +476,10 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i st
 }
 
 
-/// atom : atom_symbol | special_symbol | parenthesized_atom | fn_call_p | gen_expr
+/// atom : atom_symbol | special_symbol | parenthesized_atom | fn_call_p
+/// 
+/// not parsing generator_expr because it actually represents 'atom op' or 'op atom'.
+/// parsing it in atom_expr tho
 fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "atom",
@@ -485,29 +488,119 @@ fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) ->
             special_symbol_p,
             parenthesized_atom_p,
             fn_call_p,
-            generator_expr_p,
         ))
     )(input)
 }
 
-pub fn atom_expr_map_f<'ae>((first, rest): (Atom, Vec<(Operator, Atom)>)) -> AtomExpr {
-    let num_operators = rest.len();
-    let num_atoms = num_operators + 1;
-    let mut atoms: Vec<Atom> = Vec::with_capacity(num_atoms);
-    let mut operators: Vec<Operator> = Vec::with_capacity(num_operators);
-    // fill the atoms & operator vectors
-    atoms.push(first);
-    for (op, atom) in rest {
-        atoms.push(atom);
-        operators.push(op);
-    }
-    // return atom expr
-    AtomExpr { atoms, operators }
+/// big_atom : atom_expr_start* atom atom_expr_end*
+fn big_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str
+) -> IResult<&'i str, (Vec<Atom>, Vec<Operator>), E> {
+    context(
+        "big atom",
+        map(
+            tuple((
+                many0(atom_expr_start_p::<E>),
+                atom_p,
+                many0(atom_expr_end_p::<E>),
+            )),
+            |(starts, middle, ends)| {
+                let mut atoms: Vec<Atom> = Vec::new();
+                let mut operators: Vec<Operator> = Vec::new();
+                // stick the vectors together
+                for (atom, op) in starts {
+                    atoms.push(atom);
+                    operators.push(op);
+                }
+                atoms.push(middle);
+                for (op, atom) in ends {
+                    atoms.push(atom);
+                    operators.push(op);
+                }
+                (atoms, operators)
+            }
+        )
+    )(input)
 }
 
+/// atom_expr_start : (atom op) | generator_expr_start
+fn atom_expr_start_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str
+) -> IResult<&'i str, (Atom, Operator), E> {
+    context(
+        "atom expr start",
+        alt((
+            tuple((atom_p, op_p)),
+            map(
+                generator_expr_p, // TODO: only end-generators please
+                |atom| match atom {
+                    Atom::Generator(_) => (atom, Operator { op: '{' }),
+                    _ => panic!("generator_expr_p didn't return a generator expression")
+                }
+            )
+        ))
+    )(input)
+}
 
-/// atom_expr : atom (op atom)*
-pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, AtomExpr, E> {
+/// atom_expr_end : (op atom) | generator_expr_end
+fn atom_expr_end_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str
+) -> IResult<&'i str, (Operator, Atom), E> {
+    context(
+        "atom expr end",
+        alt((
+            tuple((op_p, atom_p)),
+            map(
+                generator_expr_p, // TODO: only end-generators please
+                |atom| match atom {
+                    Atom::Generator(_) => (Operator { op: '}' }, atom),
+                    _ => panic!("generator_expr_p didn't return a generator expression")
+                }
+            )
+        ))
+    )(input)
+}
+
+/// atom_expr : big_atom (op big_atom)*
+pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str
+) -> IResult<&'i str, AtomExpr, E> {
+    context(
+        "atom expr",
+        map(
+            tuple((
+                big_atom_p,
+                many0(
+                    tuple((
+                        op_p,
+                        big_atom_p
+                    ))
+                )
+            )),
+            |((mut atoms, mut operators), rest)| {
+                // stick everything together
+                for (op, (mut atoms2, mut operators2)) in rest {
+                    operators.push(op);
+                    atoms.append(
+                        &mut atoms2
+                    );
+                    operators.append(
+                        &mut operators2
+                    );
+                }
+                AtomExpr {
+                    atoms,
+                    operators,
+                }
+            }
+        )
+    )(input)
+}
+
+/// simple_atom_expr : big_atom (op big_atom)*
+pub fn simple_atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str
+) -> IResult<&'i str, AtomExpr, E> {
     context(
         "atom expr",
         map(
@@ -516,11 +609,23 @@ pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'
                 many0(
                     tuple((
                         op_p,
-                        atom_p,
+                        atom_p
                     ))
                 )
             )),
-            atom_expr_map_f
+            |(first_atom, rest)| {
+                let mut atoms: Vec<Atom> = vec![first_atom];
+                let mut operators: Vec<Operator> = Vec::new();
+                // stick everything together
+                for (op, atom) in rest {
+                    atoms.push(atom);
+                    operators.push(op);
+                }
+                AtomExpr {
+                    atoms,
+                    operators,
+                }
+            }
         )
     )(input)
 }

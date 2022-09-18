@@ -2,26 +2,10 @@
 
 use std::{collections::HashMap, fmt};
 
-use crate::aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator, parenthesized_atom};
-
-#[derive(Debug, PartialEq, Hash)]
-pub enum Either<L, R> {
-    Left(L),
-    Right(R),
-}
-
-impl<L, R> fmt::Display for Either<L, R>
-where
-    L: fmt::Display,
-    R: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Either::Left(x) => x.fmt(f),
-            Either::Right(x) => x.fmt(f),
-        }
-    }
-}
+use crate::{
+    aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator, parenthesized_atom},
+    either::Either,
+};
 
 #[derive(Debug, Clone)]
 pub struct ExprGraph {

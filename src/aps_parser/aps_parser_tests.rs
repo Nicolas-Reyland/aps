@@ -5,7 +5,7 @@ use super::*;
 fn test_atom_expr_p() {
     assert_eq!(
         atom_expr_p::<ApsParserKind>(
-            "A + 0 * (C ^ (2 / Q @ ...))"
+            "A + 0 * (C ^ (2 / Q @ ...)) + $ E * $#B 2"
         ),
         Ok(
             (
@@ -33,7 +33,7 @@ fn test_atom_expr_p() {
                                                 Atom::Value(
                                                     'Q',
                                                 ),
-                                                Atom::Extension
+                                                Atom::Extension,
                                             ],
                                             operators: vec![
                                                 Operator {
@@ -53,6 +53,30 @@ fn test_atom_expr_p() {
                                 ],
                             },
                         ),
+                        Atom::Generator(
+                            GeneratorExpr {
+                                elements: vec![
+                                    GeneratorElement::GenAtom(
+                                        Atom::Value(
+                                            'E',
+                                        ),
+                                    ),
+                                    GeneratorElement::GenOperator(
+                                        Operator {
+                                            op: '*',
+                                        },
+                                    ),
+                                ],
+                                iterator: Box::new(
+                                    Atom::Value(
+                                        'B',
+                                    ),
+                                ),
+                            },
+                        ),
+                        Atom::Special(
+                            '2',
+                        ),
                     ],
                     operators: vec![
                         Operator {
@@ -60,6 +84,12 @@ fn test_atom_expr_p() {
                         },
                         Operator {
                             op: '*',
+                        },
+                        Operator {
+                            op: '+',
+                        },
+                        Operator {
+                            op: '{',
                         },
                     ],
                 },

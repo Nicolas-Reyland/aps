@@ -7,5 +7,6 @@ Todo List :
 - optimize the shit out of everything
 - can use extensions (...) anywhere in an expression e.g.
     * ... + A * B = ... + (A * B)
+- different parsers for generators (separate start & end)
 
 Urgent Fix List :
