@@ -82,7 +82,7 @@ pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
 
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct Operator {
-    op: char,
+    pub op: char,
 }
 
 impl fmt::Display for Operator {
@@ -142,8 +142,8 @@ impl fmt::Display for GeneratorElement {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct GeneratorExpr {
-    elements: Vec<GeneratorElement>,
-    iterator: Box<Atom>,
+    pub elements: Vec<GeneratorElement>,
+    pub iterator: Box<Atom>,
 }
 
 impl fmt::Display for GeneratorExpr {
