@@ -1,4 +1,5 @@
 Todo List :
+- implement generators
 - pattern-match functions (just like it is done with the properties)
 - combine functions and properties ?
 - add new properties without using a brace-group
