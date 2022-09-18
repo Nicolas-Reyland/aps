@@ -35,7 +35,7 @@ type ExprNodeIndex = usize;
 pub struct ExprNode {
     pub atom_expr: aps_parser::AtomExpr,
     pub neighbours: Vec<ExprNodeIndex>,
-    transforms: Vec<AlgebraicProperty>,
+    pub transforms: Vec<AlgebraicProperty>,
     depth: i8,
     pub index: ExprNodeIndex,
 }

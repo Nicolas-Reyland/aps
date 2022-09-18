@@ -27,13 +27,15 @@ pub struct ReplContext {
     pub properties: Vec<AlgebraicProperty>,
     pub functions: Vec<AlgebraicFunction>,
     pub k_properties: Vec<KProperty>,
+    pub auto_break: bool,
 }
 
 pub fn init_context() -> ReplContext {
     ReplContext {
         properties: Vec::new(),
         functions: Vec::new(),
-        k_properties: Vec::new()
+        k_properties: Vec::new(),
+        auto_break: true,
     }
 }
 
@@ -85,13 +87,36 @@ pub fn repl(context: ReplContext) {
         )
         .with_command(
             Command::new("ctx")
+            .arg(Arg::with_name("break-status")
+                .required(false)
+                .takes_value(false)
+            )
             .about("Print the current context"),
             ctx_callback
         );
     repl.run().unwrap();
 }
 
-fn ctx_callback(_: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
+fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
+    // look for sub-command
+    let break_status_id: &'static str = "break-status";
+    let break_status_change = args.is_present(break_status_id);
+    if break_status_change {
+        let auto_break = match args.value_of(break_status_id).unwrap() {
+            "auto-break" => true,
+            "no-break" => false,
+            s => return Ok(Some(format!(" Break-status '{}' is not valid", s)))
+        };
+        if auto_break {
+            // activating auto-break
+            context.auto_break = true;
+            return Ok(Some(" Activated auto-break.".to_string()))
+        }
+        // deactivating auto-break (no-break)
+        context.auto_break = false;
+        return Ok(Some(" Deactivated auto-break.".to_string()))
+    }
+    // print the context contents
     let mut content = " Properties :\n".to_owned();
     // properties
     for property in &context.properties {
@@ -107,6 +132,10 @@ fn ctx_callback(_: ArgMatches, context: &mut ReplContext) -> Result<Option<Strin
     for k_property in &context.k_properties {
         content.push_str(&format!(" | {}\n", k_property));
     }
+    // break status
+    content.push_str(&format!(
+        "\n Auto break : {}\n", context.auto_break
+    ));
     Ok(Some(content))
 }
 
@@ -176,17 +205,28 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         context.k_properties.clone(),
         &property.atom_expr_left,
         &property.atom_expr_right,
+        context.auto_break,
     ) {
         Some(solution) => solution,
         None => return Ok(Some(format!(" No solution found for {}", property)))
     };
     // build solution string
     let mut solution_str = format!(" Solution found for '{}' :\n", property);
+    let (first_expr, _) = solution.first().unwrap(); // no transform for the base expr
     solution_str.push_str(&format!(
-        "  {}\n", solution.first().unwrap()
+        "  {}\n", first_expr
     ));
-    for step in solution.iter().skip(1) {
-        solution_str.push_str(&format!(" = {}\n", step));
+    for (step_expr, step_tr) in solution.iter().skip(1) {
+        solution_str.push_str(
+            &format!(
+                " = {}\t|\t{}\n",
+                step_expr,
+                match step_tr {
+                    Some(tr) => tr.to_string(),
+                    None => "?".to_string()
+                }
+            )
+        );
     }
     Ok(Some(solution_str))
 }

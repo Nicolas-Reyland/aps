@@ -1,0 +1,13 @@
+Todo List :
+- create new properties by combining them ?
+- pattern-match functions (just like it is done with the properties)
+- combine functions and properties ?
+- add new properties without using a brace-group
+- priorities between operators e.g.
+    * "A + B * C + D" should be seen as "A + (B * C) + D" etc
+- parallelize both graph explorations
+- use hashmaps or hashsets instead of vectors in the graph
+- optimize the shit out of everything
+
+Urgent Fix :
+- common can only be a base, and not any node ?? (check if true first)

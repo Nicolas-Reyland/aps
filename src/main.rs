@@ -9,8 +9,8 @@ use repl::{init_context, import_into_context};
 #[path = "explorer/solution.rs"] mod solution;
 #[path = "repl/repl.rs"] mod repl;
 
-static MAX_GRAPH_EXPLORATION_DEPTH: u8 = 10;
-static MAX_NODES_PER_GRAPH: usize = 10_000;
+static MAX_GRAPH_EXPLORATION_DEPTH: u8 = 12;
+static MAX_NODES_PER_GRAPH: usize = 100_000;
 
 fn main() {
     // collect cmd args

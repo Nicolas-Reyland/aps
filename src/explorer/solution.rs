@@ -22,8 +22,9 @@ pub fn solve_equality(
     functions: Vec<AlgebraicFunction>,
     _k_properties: Vec<KProperty>,
     left_expression: &AtomExpr,
-    right_expression: &AtomExpr
-) -> Option<Vec<AtomExpr>> {
+    right_expression: &AtomExpr,
+    auto_break: bool,
+) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>)>> {
     let mut left = init_graph(left_expression.clone());
     let mut right = init_graph(right_expression.clone());
     let mut depth: u8 = 0;
@@ -47,11 +48,15 @@ pub fn solve_equality(
         // increment the depth
         depth += 1;
         // manual calculation limits
-        if depth > MAX_GRAPH_EXPLORATION_DEPTH ||
+        if auto_break && (
+            depth > MAX_GRAPH_EXPLORATION_DEPTH ||
             left.nodes.len() > MAX_NODES_PER_GRAPH ||
-            right.nodes.len() > MAX_NODES_PER_GRAPH
+            right.nodes.len() > MAX_NODES_PER_GRAPH)
         {
-            eprintln!("Manually breaking from graph exploration algorithm");
+            eprintln!(
+                "Automatically breaking from graph exploration algorithm. Depth: {}, Left: {}, Right: {}",
+                depth, left.nodes.len(), right.nodes.len()
+            );
             break
         }
     }
@@ -64,32 +69,47 @@ fn find_route(
     right: &ExprGraph,
     lcommon: &ExprNode,
     rcommon: &ExprNode,
-) -> Vec<AtomExpr> {
-    let mut route: Vec<AtomExpr> = Vec::new();
+) -> Vec<(AtomExpr, Option<AlgebraicProperty>)> {
+    let mut route: Vec<(AtomExpr, Option<AlgebraicProperty>)> = Vec::new();
     // link base-node to common on the left
-    let mut lroute: Vec<AtomExpr> = Vec::new();
+    let mut lroute: Vec<(AtomExpr, Option<AlgebraicProperty>)> = Vec::new();
     let mut lnode = lcommon;
     while lnode.index != 0 {
-        lroute.push(lnode.atom_expr.clone());
+        lroute.push((
+            lnode.atom_expr.clone(),
+            Some(lnode.transforms.first().unwrap().clone())
+        ));
         lnode = &left.nodes[*lnode.neighbours.first().unwrap()];
     }
-    lroute.push(lnode.atom_expr.clone());
+    // push base node
+    lroute.push((lnode.atom_expr.clone(), None));
     lroute.reverse(); // from common->base to base->common
     // link base-node to common on the right
-    let mut rroute: Vec<AtomExpr> = Vec::new();
+    let mut rroute: Vec<(AtomExpr, Option<AlgebraicProperty>)> = Vec::new();
     let mut rnode = rcommon;
     while rnode.index != 0 {
-        rroute.push(rnode.atom_expr.clone());
+        rroute.push((
+            rnode.atom_expr.clone(),
+            Some(rnode.transforms.first().unwrap().clone())
+        ));
         rnode = &right.nodes[*rnode.neighbours.first().unwrap()];
     }
-    rroute.push(rnode.atom_expr.clone());
+    // push the base
+    rroute.push((rnode.atom_expr.clone(), None));
     rroute.reverse(); // from common->base to base->common
     // add all the left route
     route.append(
         &mut lroute
     );
     // remove the common element from the right route (or we'll have it twice)
-    assert_eq!(rroute.pop().unwrap(), lcommon.atom_expr);
+    // println!("route:\n{:#?}\n\nrroute:\n{:#?}\n", route, rroute);
+    assert_eq!(
+        match rroute.pop().unwrap() {(x,_) => x},
+        lcommon.atom_expr.clone()
+    );
+    route.append(
+        &mut rroute
+    );
     // return the route
     route
 }
