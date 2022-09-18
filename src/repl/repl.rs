@@ -49,7 +49,7 @@ pub fn repl(context: ReplContext) {
             Command::new("prove")
                 .arg(Arg::with_name("property")
                     .required(true)
-                    .min_values(3)
+                    .min_values(1)
                 )
                 .about("Prove a property using the current context"),
             prove_callback
@@ -70,7 +70,7 @@ pub fn repl(context: ReplContext) {
             )
             .arg(Arg::with_name("expression")
                 .required(true)
-                .min_values(3)
+                .min_values(1)
             )
             .about("Explore a graph a number of times and print it in dot format"),
             graph_callback

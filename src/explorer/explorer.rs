@@ -23,7 +23,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExprGraph {
     pub nodes: Vec<ExprNode>,
     max_depth: u8,

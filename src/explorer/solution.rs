@@ -1,6 +1,6 @@
 // 
 
-use std::thread;
+use std::{thread, sync::{Mutex, Arc}, io::Write};
 
 use crate::{
     aps_parser::{
@@ -27,32 +27,63 @@ pub fn solve_equality(
     right_expression: &AtomExpr,
     auto_break: bool,
 ) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>)>> {
-    let mut left = init_graph(left_expression.clone());
-    let mut right = init_graph(right_expression.clone());
+    // left graph
+    let left = init_graph(left_expression.clone());
+    let left_mutex = Arc::new(Mutex::new(left));
+    // right graph
+    let right = init_graph(right_expression.clone());
+    let right_mutex = Arc::new(Mutex::new(right));
+    // number of explorations
     let mut depth: u8 = 0;
     loop {
+        let lnodes = {
+            let left_mutex_clone = Arc::clone(&left_mutex);
+            let left_clone = (*left_mutex_clone.lock().unwrap()).clone();
+            left_clone.nodes
+        };
+        let rnodes = {
+            let right_mutex_clone = Arc::clone(&right_mutex);
+            let right_clone = (*right_mutex_clone.lock().unwrap()).clone();
+            right_clone.nodes
+        };
         // look for a common element
-        for lnode in &left.nodes {
-            for rnode in &right.nodes {
+        for lnode in &lnodes {
+            for rnode in &rnodes {
+                std::io::stdout().flush().unwrap();
                 if rnode == lnode {
                     return Some(find_route(
-                        &left,
-                        &right,
+                        &left_mutex.lock().unwrap(),
+                        &right_mutex.lock().unwrap(),
                         &lnode,
-                        &rnode
+                        &rnode,
                     ))
                 }
             }
         }
         // explore the graphs once each
-        let left_handle = thread::spawn(
-            move || explore_graph(&mut left, &properties, &functions)
-        );
-        let right_handle = thread::spawn(
-            move || explore_graph(&mut right, &properties, &functions)
-        );
+        let left_handle = {
+            // clone things
+            let scoped_left_mutex_clone = Arc::clone(&left_mutex);
+            let properties_clone = properties.clone();
+            let functions_clone = functions.clone();
+            // return thread
+            thread::spawn(
+                move || explore_graph(&mut *scoped_left_mutex_clone.lock().unwrap(), &properties_clone, &functions_clone)
+            )
+        };
+        let right_handle = {
+            // clone things
+            let scoped_right_mutex_clone = Arc::clone(&right_mutex);
+            let properties_clone = properties.clone();
+            let functions_clone = functions.clone();
+            // return thread
+            thread::spawn(
+                move || explore_graph(&mut *scoped_right_mutex_clone.lock().unwrap(), &properties_clone, &functions_clone)
+            )
+        };
         let left_has_evolved = left_handle.join().unwrap();
         let right_has_evolved = right_handle.join().unwrap();
+
         if !(left_has_evolved || right_has_evolved)
         {
             // one graph can evolve alone, and maybe 'join' the other
@@ -62,17 +93,29 @@ pub fn solve_equality(
         // increment the depth
         depth += 1;
         // manual calculation limits
-        if auto_break && (
-            depth > MAX_GRAPH_EXPLORATION_DEPTH ||
-            left.nodes.len() > MAX_NODES_PER_GRAPH ||
-            right.nodes.len() > MAX_NODES_PER_GRAPH)
-        {
-            eprintln!(
-                "Automatically breaking from graph exploration algorithm. Depth: {}, Left: {}, Right: {}",
-                depth, left.nodes.len(), right.nodes.len()
-            );
-            break
+        if auto_break {
+            let num_left_nodes = {
+                let left_mutex_clone = Arc::clone(&left_mutex);
+                let left_clone = (*left_mutex_clone.lock().unwrap()).clone();
+                left_clone.nodes.len()
+            };
+            let num_right_nodes = {
+                let right_mutex_clone = Arc::clone(&right_mutex);
+                let right_clone = (*right_mutex_clone.lock().unwrap()).clone();
+                right_clone.nodes.len()
+            };
+            if depth > MAX_GRAPH_EXPLORATION_DEPTH ||
+                num_left_nodes > MAX_NODES_PER_GRAPH ||
+                num_right_nodes > MAX_NODES_PER_GRAPH
+            {
+                eprintln!(
+                    "Automatically breaking from graph exploration algorithm. Depth: {}, Left: {}, Right: {}",
+                    depth, num_left_nodes, num_right_nodes
+                );
+                break
+            }
         }
+        
     }
     // no solution found
     None
