@@ -1,5 +1,7 @@
 // 
 
+use std::thread;
+
 use crate::{
     aps_parser::{
         AtomExpr,
@@ -43,8 +45,14 @@ pub fn solve_equality(
             }
         }
         // explore the graphs once each
-        let left_has_evolved = explore_graph(&mut left, &properties, &functions);
-        let right_has_evolved = explore_graph(&mut right, &properties, &functions);
+        let left_handle = thread::spawn(
+            move || explore_graph(&mut left, &properties, &functions)
+        );
+        let right_handle = thread::spawn(
+            move || explore_graph(&mut right, &properties, &functions)
+        );
+        let left_has_evolved = left_handle.join().unwrap();
+        let right_has_evolved = right_handle.join().unwrap();
         if !(left_has_evolved || right_has_evolved)
         {
             // one graph can evolve alone, and maybe 'join' the other
