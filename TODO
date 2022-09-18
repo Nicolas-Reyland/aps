@@ -9,7 +9,5 @@ Todo List :
 - optimize the shit out of everything
 - can use extensions (...) anywhere in an expression e.g.
     * ... + A * B = ... + (A * B)
-- ExprNode 'neighbours' and 'transofrms' should only hold one element.
-    Thus, they should be renamed to 'parent' and 'transform' and be values, not lists/vectors
 
 Urgent Fix List :

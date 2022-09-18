@@ -134,9 +134,9 @@ fn find_route(
     while lnode.index != 0 {
         lroute.push((
             lnode.atom_expr.clone(),
-            Some(lnode.transforms.first().unwrap().clone())
+            Some(lnode.transform.as_ref().unwrap().clone())
         ));
-        lnode = &left.nodes[*lnode.neighbours.first().unwrap()];
+        lnode = &left.nodes[lnode.parent];
     }
     // push base node
     lroute.push((lnode.atom_expr.clone(), None));
@@ -150,8 +150,8 @@ fn find_route(
             rnode.atom_expr.clone(),
             next_transform
         ));
-        next_transform = Some(rnode.transforms.first().unwrap().clone());
-        rnode = &right.nodes[*rnode.neighbours.first().unwrap()];
+        next_transform = Some(rnode.transform.as_ref().unwrap().clone());
+        rnode = &right.nodes[rnode.parent];
     }
     // push the base
     rroute.push((rnode.atom_expr.clone(), next_transform));

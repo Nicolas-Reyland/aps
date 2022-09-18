@@ -44,8 +44,8 @@ type ExprNodeIndex = usize;
 #[derive(Debug, Clone, Hash)]
 pub struct ExprNode {
     pub atom_expr: aps_parser::AtomExpr,
-    pub neighbours: Vec<ExprNodeIndex>,
-    pub transforms: Vec<AlgebraicProperty>,
+    pub parent: ExprNodeIndex,
+    pub transform: Option<AlgebraicProperty>,
     depth: i8,
     pub index: ExprNodeIndex,
 }
@@ -65,18 +65,13 @@ impl fmt::Display for ExprNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "ExprNode {{ expr: '{}', depth: {}, index: {}, neighbours: [",
+            "ExprNode {{ expr: '{}', depth: {}, index: {}, parent: {}, transform: {}",
             self.atom_expr,
             self.depth,
-            self.index
+            self.index,
+            self.parent,
+            match &self.transform {Some(x) => x.to_string(), None => "?".to_string()},
         )?;
-        for neighbour in &self.neighbours {
-            write!(f, "{} ", neighbour)?;
-        }
-        write!(f, "], transforms: [")?;
-        for tr in &self.transforms {
-            write!(f, "{} ", tr)?;
-        }
         write!(f, "] }}")
     }
 }
@@ -87,8 +82,8 @@ type PropertyMapping = HashMap<Atom, Either<Atom, AtomExpr>>;
 pub fn init_graph(expr: AtomExpr) -> ExprGraph {
     let base_node = ExprNode {
         atom_expr: expr,
-        neighbours: Vec::new(),
-        transforms: Vec::new(),
+        parent: 0,
+        transform: None,
         depth: 0,
         index: 0,
     };
@@ -120,8 +115,8 @@ pub fn explore_graph(
                     node.clone(),
                     ExprNode {
                         atom_expr: new_expr.clone(),
-                        neighbours: vec![],
-                        transforms: vec![property.clone()],
+                        parent: 0,
+                        transform: Some(property.clone()),
                         depth: 0,
                         index: 0,
                     }
@@ -131,13 +126,11 @@ pub fn explore_graph(
     }
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
-    for (mut src_node, mut new_node) in new_nodes {
+    for (src_node, mut new_node) in new_nodes {
         if ! graph.nodes.contains(&new_node) {
             at_least_one_new_node = true;
             // add source node to the new node's neighbours
-            new_node.neighbours.push(src_node.index);
-            // add the new node to the source node's neighbours
-            src_node.neighbours.push(new_node.index);
+            new_node.parent = src_node.index;
             // set the depth of the new node
             new_node.depth = src_node.depth + 1;
             // set the index of the new node
@@ -181,14 +174,12 @@ fn print_node_dot_format(node: &ExprNode) -> String {
     content.push_str(&format!("\"];\n"));
 
     // start printing neighbours
-    for (nb_index, neighbour) in node.neighbours.iter().enumerate() {
-        content.push_str(&format!(
-            "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
-            neighbour,
-            node.index,
-            node.transforms[nb_index as usize]
-        ));
-    }
+    content.push_str(&format!(
+        "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
+        node.parent,
+        node.index,
+        match &node.transform {Some(x) => x.to_string(), None => "?".to_string()},
+    ));
     content.push_str("\n");
     content
 }
