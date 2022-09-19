@@ -8,6 +8,6 @@ Todo List :
 - can use extensions (...) anywhere in an expression e.g.
     * ... + A * B = ... + (A * B)
 - different parsers for generators (separate start & end)
-- enforce operatr priority or parentheses
+- enforce operator priority or parentheses
 
 Urgent Fix List :
