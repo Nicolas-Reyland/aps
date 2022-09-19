@@ -7,7 +7,7 @@ use crate::{
         AlgebraicFunction,
         AlgebraicProperty,
         KProperty,
-        split_algebraic_objects
+        split_algebraic_objects, Atom
     },
     solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format}
 };
@@ -241,9 +241,9 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) {
     ) {
         Ok(("", algebraic_objects)) => algebraic_objects,
         Ok((rest, algebraic_objects)) => panic!(
-            " Failed to parse everything:\n'{}'\nParsed (root) :\n{:#?}\n",
+            " Failed to parse everything:\nParsed (root) :\n{:#?}\n'{}'\n",
+            algebraic_objects,
             rest,
-            algebraic_objects
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
     };
@@ -253,6 +253,23 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) {
         mut functions,
         mut k_properties
     ) = split_algebraic_objects(alg_objects);
+    // add functions as properties
+    context.properties.extend(
+        functions.iter().map(
+            |function| AlgebraicProperty {
+                atom_expr_left: AtomExpr {
+                    atoms: vec![
+                        Atom::FunctionCall((
+                            function.name.clone(),
+                            function.atom_expr_left.clone()
+                        )),
+                    ],
+                    operators: Vec::new(),
+                },
+                atom_expr_right: function.atom_expr_right,
+            }
+        )
+    );
     // extend context
     context.properties.append(&mut properties);
     context.functions.append(&mut functions);

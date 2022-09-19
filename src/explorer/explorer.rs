@@ -403,7 +403,9 @@ fn generate_new_expression(
                                 return generate_new_expression(&function.atom_expr_right, mappings, functions);
                             }
                         }
-                        panic!("No function named '{}'", fn_name);
+                        // function is not defined
+                        //
+                        panic!("No function named \"{fn_name}\"");
                     }
                     Atom::Generator(gen_expr) => {
                         // check for iterator (must be a numeral, or we can't generate)
@@ -458,7 +460,7 @@ fn generate_new_expression(
 }
 
 #[test]
-fn test() {
+fn test_some_things() {
     let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
         "(X + Y) + Z"
     ) {
@@ -466,7 +468,7 @@ fn test() {
         Ok((rest, parsed)) => panic!(
             "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
             rest,
-            parsed
+            parsed,
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
     };
