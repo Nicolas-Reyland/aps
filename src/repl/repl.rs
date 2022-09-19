@@ -264,7 +264,7 @@ fn concat_args(args: Values) -> String {
     let mut property_str = String::new();
     for value in args {
         property_str.push_str(value);
-        property_str.push_str(" ");
+        //property_str.push_str(" ");
     }
     property_str
 }

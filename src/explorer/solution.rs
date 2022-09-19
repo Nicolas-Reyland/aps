@@ -7,7 +7,7 @@ use crate::{
         AtomExpr,
         AlgebraicProperty,
         AlgebraicFunction,
-        KProperty
+        KProperty, Atom
     },
     explorer::{
         init_graph,
@@ -20,13 +20,28 @@ use crate::{
 };
 
 pub fn solve_equality(
-    properties: Vec<AlgebraicProperty>,
+    mut properties: Vec<AlgebraicProperty>,
     functions: Vec<AlgebraicFunction>,
     _k_properties: Vec<KProperty>,
     left_expression: &AtomExpr,
     right_expression: &AtomExpr,
     auto_break: bool,
 ) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>)>> {
+    // merge functions into properties
+    for function in functions.clone() {
+        properties.push(AlgebraicProperty {
+            atom_expr_left: AtomExpr {
+                atoms: vec![
+                    Atom::FunctionCall((
+                        function.name,
+                        function.atom_expr_left
+                    )),
+                ],
+                operators: Vec::new(),
+            },
+            atom_expr_right: function.atom_expr_right,
+        });
+    }
     // left graph
     let left = init_graph(left_expression.clone());
     let left_mutex = Arc::new(Mutex::new(left));
