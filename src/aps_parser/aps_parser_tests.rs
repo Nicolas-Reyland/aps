@@ -102,7 +102,7 @@ fn test_atom_expr_p() {
 fn test_brace_def_p() {
     assert_eq!(
         brace_def_p::<ApsParserKind>(
-            "+ :: { A = A ;; B = C ;; } "
+            "+ :: { A = A ; B = C ; } "
         ),
         Ok(
             (
@@ -159,7 +159,7 @@ fn test_brace_def_p() {
 fn test_fn_def_p() {
     assert_eq!(
         fn_def_p::<ApsParserKind>(
-            "square :: A -> A ^ 2 ;; "
+            "square :: A -> A ^ 2 ; "
         ),
         Ok(
             (
@@ -199,7 +199,7 @@ fn test_fn_def_p() {
 fn test_k_def_p() {
     assert_eq!(
         k_def_p::<ApsParserKind>(
-            "K :: ?N5 ;; "
+            "K :: ?N5 ; "
         ),
         Ok(
             (

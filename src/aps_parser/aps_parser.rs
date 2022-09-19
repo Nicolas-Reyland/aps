@@ -177,9 +177,9 @@ impl fmt::Display for AlgebraicProperty {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct AlgebraicFunction {
-    name: String,
-    atom_expr_left: AtomExpr,
-    atom_expr_right: AtomExpr,
+    pub name: String,
+    pub atom_expr_left: AtomExpr,
+    pub atom_expr_right: AtomExpr,
 }
 
 impl fmt::Display for AlgebraicFunction {
@@ -358,9 +358,9 @@ fn equ_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str
     sp_terminated!(recognize(char('=')))(input)
 }
 
-/// end : ';;' sp
+/// end : ';' sp
 fn end_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
-    sp_terminated!(tag(";;"))(input)
+    sp_terminated!(recognize(char(';')))(input)
 }
 
 
