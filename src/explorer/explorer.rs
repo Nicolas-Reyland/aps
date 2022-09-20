@@ -1,27 +1,11 @@
 // Graph Explorer
 
-use std::{collections::HashMap, fmt};
+use std::{collections::HashMap, fmt, vec};
 
-use crate::aps_parser::{self, AtomExpr, AlgebraicProperty, AlgebraicFunction, Atom, Operator, parenthesized_atom};
-
-#[derive(Debug, PartialEq, Hash)]
-pub enum Either<L, R> {
-    Left(L),
-    Right(R),
-}
-
-impl<L, R> fmt::Display for Either<L, R>
-where
-    L: fmt::Display,
-    R: fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Either::Left(x) => x.fmt(f),
-            Either::Right(x) => x.fmt(f),
-        }
-    }
-}
+use crate::{
+    aps_parser::{self, AtomExpr, AlgebraicProperty, Atom, Operator, parenthesized_atom, GeneratorElement, AlgebraicFunction},
+    either::Either,
+};
 
 #[derive(Debug, Clone)]
 pub struct ExprGraph {
@@ -189,14 +173,14 @@ fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: 
         src_expr,
         &property.atom_expr_left,
         &property.atom_expr_right,
-        functions
+        functions,
     );
     new_expressions.extend(
         apply_machted_substitution(
             src_expr,
             &property.atom_expr_right,
             &property.atom_expr_left,
-            functions
+            functions,
         )
     );
     return new_expressions;
@@ -208,9 +192,9 @@ fn apply_machted_substitution(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr,
     // call 'atom_expressions_match' on every expression (src_expr and sub-expression in parentheses)
     let mut new_expressions: Vec<AtomExpr> = Vec::new();
     // base call on src_expr
-    match atom_expressions_match(src, left, functions) {
+    match atom_expressions_match(src, left) {
         Some(mappings) => {
-            let new_expr = generate_new_expression(right, &mappings);
+            let new_expr = generate_new_expression(right, &mappings, &functions);
             new_expressions.push(new_expr);
         },
         None => (),
@@ -246,7 +230,6 @@ fn apply_machted_substitution(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr,
 fn atom_expressions_match(
     src_expr: &AtomExpr, // source expression
     p_expr: &AtomExpr, // expression to match against
-    functions: &Vec<AlgebraicFunction>, // functions (which might be used in the properties)
 ) -> Option<PropertyMapping> {
     // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
     let mut mappings: PropertyMapping = HashMap::new();
@@ -264,7 +247,7 @@ fn atom_expressions_match(
         // compare atoms
         let atom_a = &src_expr.atoms[i];
         let atom_b = &p_expr.atoms[i];
-        //println!("atom_a = {:?}\natom_b = {:?}\n", atom_a, atom_b);
+        // println!("atom_a = {}\natom_b = {}\n", atom_a, atom_b);
         // map rest of src_atom to '...'
         if atom_b == &Atom::Extension {
             mappings.insert(atom_b.clone(), Either::Right(
@@ -278,7 +261,7 @@ fn atom_expressions_match(
             }
             return Some(mappings)
         }
-        match left_to_right_match(atom_a, atom_b, functions) {
+        match left_to_right_match(atom_a, atom_b) {
             (
                 true,
                 None
@@ -329,15 +312,12 @@ fn atom_expressions_match(
 fn left_to_right_match(
     atom_a: &Atom,
     atom_b: &Atom,
-    functions: &Vec<AlgebraicFunction>
 ) -> (bool, Option<PropertyMapping>) {
-    //println!("Map {:?} to {:?} ?\n", atom_a, atom_b);
     match atom_b { // we match the second atom !!
         Atom::Parenthesized(par_b) => match atom_a {
             Atom::Parenthesized(par_a) => match atom_expressions_match(
                 par_a,
                 par_b,
-                functions
             ) {
                 Some(par_mappings) => {
                     (true, Some(par_mappings))
@@ -356,7 +336,21 @@ fn left_to_right_match(
         },
         Atom::Special(_) => (atom_a == atom_b, None),
         Atom::Extension => todo!(),
-        Atom::FunctionCall(_) => todo!(),
+        Atom::FunctionCall((fn_name_b, fn_expr_b)) => match atom_a {
+            Atom::FunctionCall((fn_name_a, fn_expr_a)) => {
+                if fn_name_b != fn_name_a {
+                    return (false, None)
+                }
+                match atom_expressions_match(
+                    fn_expr_a,
+                    fn_expr_b
+                ) {
+                    Some(fn_mappings) => (true, Some(fn_mappings)),
+                    None => (false, None),
+                }
+            },
+            _ => (false, None)
+        },
         Atom::Generator(_) => todo!(),
     }
 }
@@ -364,7 +358,8 @@ fn left_to_right_match(
 /// Generate new expression using source, value-expression and mappings
 fn generate_new_expression(
     v_expr: &AtomExpr,
-    mappings: &PropertyMapping
+    mappings: &PropertyMapping,
+    functions: &Vec<AlgebraicFunction>,
 ) -> AtomExpr {
     // init new atoms and operators
     let mut atoms: Vec<Atom> = Vec::new();
@@ -373,11 +368,11 @@ fn generate_new_expression(
     let num_v_atoms = v_expr.atoms.len();
     let mut i = 0;
     //println!("Mappings:\n{:#?}\n", mappings);
-    while i  < num_v_atoms
+    'main_loop: while i < num_v_atoms
     {
         let atom_v = &v_expr.atoms[i];
         // immediately add operator
-        if i != 0 {
+        if i != 0 && v_expr.operators[i - 1].op != '{' {
             operators.push(v_expr.operators[i - 1].clone());
         }
         // expand extension expressions
@@ -399,9 +394,58 @@ fn generate_new_expression(
             atoms.push(
                 match atom_v {
                     Atom::Parenthesized(par_v) => {
-                        aps_parser::parenthesized_atom(generate_new_expression(par_v, mappings))
+                        aps_parser::parenthesized_atom(generate_new_expression(par_v, mappings, functions))
                     },
                     Atom::Special(_) => atom_v.clone(),
+                    Atom::FunctionCall((fn_name, _)) => {
+                        for function in functions {
+                            if function.name == *fn_name {
+                                return generate_new_expression(&function.atom_expr_right, mappings, functions);
+                            }
+                        }
+                        // function is not defined
+                        //
+                        panic!("No function named \"{fn_name}\"");
+                    }
+                    Atom::Generator(gen_expr) => {
+                        // check for iterator (must be a numeral, or we can't generate)
+                        let num_iterations = match mappings.get(&gen_expr.iterator) {
+                            Some(Either::Left(Atom::Special(c))) => c.to_digit(10),
+                            _ => panic!("Iterator value was not a special value for generator expression.\natom_v: {atom_v}, expr_v: {v_expr}\nMappings :{:#?}\n", mappings),
+                        }.unwrap();
+                        // remove the special operator ('{' or '}')
+                        if ! operators.is_empty() {
+                            if operators.last().unwrap().op == '}' {
+                                operators.pop().unwrap();
+                            } else {
+                                // should not be added (guard at beginning of the loop)
+                                assert_eq!(v_expr.operators[i - 1].op, '{');
+                            }
+                        }
+                        // get mappings for the atoms inside the generator-expression
+                        let vec_capacity = gen_expr.elements.len() / 2;
+                        let mut mapped_atoms: Vec<Atom> = Vec::with_capacity(vec_capacity);
+                        let mut gen_operators: Vec<Operator> = Vec::with_capacity(vec_capacity);
+                        for gen_element in &gen_expr.elements {
+                            match gen_element {
+                                GeneratorElement::GenAtom(atom) => {
+                                    match mappings.get(atom) {
+                                        Some(Either::Left(atom)) => mapped_atoms.push((*atom).clone()),
+                                        Some(Either::Right(atom_expr)) => mapped_atoms.push(parenthesized_atom((*atom_expr).clone())),
+                                        None => panic!("Could not find mapping for gen-element {}", gen_element),
+                                    }
+                                },
+                                GeneratorElement::GenOperator(op) => gen_operators.push((*op).clone()),
+                            }
+                        }
+                        // generate part of the expression
+                        for _ in 0..num_iterations {
+                            atoms.extend(mapped_atoms.clone());
+                            operators.extend(gen_operators.clone());
+                        }
+                        i += num_iterations as usize;
+                        continue 'main_loop;
+                    }
                     _ => match mappings.get(atom_v) {
                         Some(Either::Left(atom)) => atom.clone(),
                         Some(Either::Right(_)) => panic!("Found extension instead of atom\n"),
@@ -416,7 +460,7 @@ fn generate_new_expression(
 }
 
 #[test]
-fn test() {
+fn test_some_things() {
     let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
         "(X + Y) + Z"
     ) {
@@ -424,12 +468,12 @@ fn test() {
         Ok((rest, parsed)) => panic!(
             "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
             rest,
-            parsed
+            parsed,
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
     };
     let property = match aps_parser::root::<aps_parser::ApsParserKind>(
-        "+ :: { (A + B) + C = A + (B + C) ;; }"
+        "+ :: { (A + B) + C = A + (B + C) ; }"
     ) {
         Ok(("", parsed)) => match parsed.first().unwrap() {
             aps_parser::AlgebraicObject::PropertyGroup(
