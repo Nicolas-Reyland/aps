@@ -1,7 +1,5 @@
 Todo List :
-- implement generators
 - pattern-match functions (just like it is done with the properties)
-- combine functions and properties ?
 - add new properties without using a brace-group
 - use hashmaps or hashsets instead of vectors in the graph
 - optimize the shit out of everything
@@ -9,5 +7,8 @@ Todo List :
     * ... + A * B = ... + (A * B)
 - different parsers for generators (separate start & end)
 - enforce operator priority or parentheses
+- don't check properties on older nodes
+	(filter by node-depth, comparing to graph.max_depth)
+- new thread for each property-check
 
 Urgent Fix List :
