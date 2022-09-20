@@ -206,7 +206,7 @@ fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: 
             functions,
         )
     );
-    return new_expressions;
+    new_expressions
 }
 
 /// try to match the src_expr to the left_expr, then generate a new expression based on right_expr
@@ -249,7 +249,7 @@ fn match_and_apply(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr, functions:
                 .collect::<Vec<AtomExpr>>()
         );
     }
-    return new_expressions;
+    new_expressions
 }
 
 fn atom_expressions_match(

@@ -1,6 +1,6 @@
 // 
 
-use std::{thread, sync::{Mutex, Arc}, io::Write};
+use std::{thread, sync::{Mutex, Arc}};
 
 use crate::{
     aps_parser::{
