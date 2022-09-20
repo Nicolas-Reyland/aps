@@ -49,7 +49,6 @@ pub fn solve_equality(
         // look for a common element
         for lnode in &lnodes {
             for rnode in &rnodes {
-                std::io::stdout().flush().unwrap();
                 if rnode == lnode {
                     return Some(find_route(
                         &left_mutex.lock().unwrap(),

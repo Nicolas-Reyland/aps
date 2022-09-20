@@ -28,10 +28,10 @@ type ExprNodeIndex = usize;
 #[derive(Debug, Clone, Hash)]
 pub struct ExprNode {
     pub atom_expr: aps_parser::AtomExpr,
-    pub parent: ExprNodeIndex,
     pub transform: Option<AlgebraicProperty>,
-    depth: u8,
+    pub parent: ExprNodeIndex,
     pub index: ExprNodeIndex,
+    depth: u8,
 }
 
 impl PartialEq for ExprNode {
