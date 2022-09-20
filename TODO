@@ -10,5 +10,6 @@ Todo List :
 - don't check properties on older nodes
 	(filter by node-depth, comparing to graph.max_depth)
 - new thread for each property-check
+- use more references, less copies of data (for threads etc)
 
 Urgent Fix List :
