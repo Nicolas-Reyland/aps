@@ -165,7 +165,7 @@ fn test_fn_def_p() {
             (
                 "",
                 AlgebraicFunction {
-                    name: "square ".to_string(),
+                    name: "square".to_string(),
                     atom_expr_left: AtomExpr {
                         atoms: vec![
                             Atom::Value(
