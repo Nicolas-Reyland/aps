@@ -30,7 +30,7 @@ pub struct ExprNode {
     pub atom_expr: aps_parser::AtomExpr,
     pub parent: ExprNodeIndex,
     pub transform: Option<AlgebraicProperty>,
-    depth: i8,
+    depth: u8,
     pub index: ExprNodeIndex,
 }
 
@@ -90,8 +90,9 @@ pub fn explore_graph(
     functions: &Vec<AlgebraicFunction>,
 ) -> bool {
     let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
-    for i in 0..graph.nodes.len() {
-        let node = graph.nodes[i].clone();
+    for node in graph.nodes.clone().iter().filter(
+        |node| node.depth == graph.max_depth
+    ) {
         for property in properties.clone() {
             let new_expressions = apply_property(&node.atom_expr, &property, functions);
             new_nodes.extend(
