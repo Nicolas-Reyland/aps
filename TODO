@@ -1,7 +1,6 @@
 Todo List :
-- pattern-match functions (just like it is done with the properties)
 - add new properties without using a brace-group
-- use hashmaps or hashsets instead of vectors in the graph
+- use hashmaps or hashsets instead of vectors in the graphs
 - optimize the shit out of everything
 - can use extensions (...) anywhere in an expression e.g.
     * ... + A * B = ... + (A * B)
