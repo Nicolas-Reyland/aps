@@ -1,5 +1,6 @@
 #[cfg(test)]
-use super::*;
+
+use crate::aps_parser::*;
 
 #[test]
 fn test_atom_expr_p() {

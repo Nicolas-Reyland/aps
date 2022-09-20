@@ -12,8 +12,6 @@ use nom::{
     sequence::{preceded, terminated, tuple}, IResult,
 };
 
-#[path = "aps_parser_tests.rs"] pub(crate) mod aps_parser_tests;
-
 pub type ApsParserKind<'i> = (&'i str, ErrorKind);
 
 #[derive(Debug, Clone, Hash, Eq)]
@@ -190,9 +188,9 @@ impl fmt::Display for AlgebraicFunction {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct KProperty {
-    undefined_property: bool,
-    base: char,
-    dim: i8,
+    pub undefined_property: bool,
+    pub base: char,
+    pub dim: i8,
 }
 
 impl fmt::Display for KProperty {
@@ -302,7 +300,7 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(inpu
 }
 
 /// fn_call_p : fn_name '(' atom_expr ')' sp
-fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str,  Atom, E> {
+pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str,  Atom, E> {
     context(
         "function call atom",
         map(
@@ -324,7 +322,7 @@ fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str)
 }
 
 /// generator_expr : '$' sp (op | atom)+ '$' sp '#' sp (atom_symbol | special_symbol)
-fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
+pub fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     context(
         "generator expr",
         map(

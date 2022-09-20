@@ -8,6 +8,8 @@ use repl::{init_context, import_into_context};
 #[path = "explorer/solution.rs"] mod solution;
 #[path = "repl/repl.rs"] mod repl;
 #[path = "either/either.rs"] mod either;
+#[path = "tests/aps_parser_tests.rs"] pub(crate) mod aps_parser_tests;
+#[path = "tests/solution_tests.rs"] pub(crate) mod solution_tests;
 
 static MAX_GRAPH_EXPLORATION_DEPTH: u8 = 12;
 static MAX_NODES_PER_GRAPH: usize = 100_000;

@@ -282,7 +282,7 @@ fn concat_args(args: Values) -> String {
     property_str
 }
 
-fn str2atom_expr(input: &str) -> AtomExpr {
+pub fn str2atom_expr(input: &str) -> AtomExpr {
     match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
         input
     ) {
