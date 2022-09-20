@@ -1,6 +1,6 @@
 // Graph Explorer
 
-use std::{collections::HashMap, fmt, vec};
+use std::{collections::HashMap, fmt, vec, thread::{JoinHandle, self}};
 
 use crate::{
     aps_parser::{self, AtomExpr, AlgebraicProperty, Atom, Operator, parenthesized_atom, GeneratorElement, AlgebraicFunction},
@@ -90,25 +90,47 @@ pub fn explore_graph(
     functions: &Vec<AlgebraicFunction>,
 ) -> bool {
     let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
-    for node in graph.nodes.clone().iter().filter(
+    let mut handles: Vec<JoinHandle<(usize, usize, Vec<AtomExpr>)>> = Vec::new();
+    for node in graph.nodes.iter().filter(
         |node| node.depth == graph.max_depth
     ) {
-        for property in properties.clone() {
-            let new_expressions = apply_property(&node.atom_expr, &property, functions);
-            new_nodes.extend(
-                new_expressions.iter().map(|new_expr| (
-                    node.clone(),
-                    ExprNode {
-                        atom_expr: new_expr.clone(),
-                        parent: 0,
-                        transform: Some(property.clone()),
-                        depth: 0,
-                        index: 0,
-                    }
-                ))
+        for (p_index, property) in properties.iter().enumerate() {
+            handles.push(
+                {
+                    let atom_expr_clone = node.atom_expr.clone();
+                    let property_clone = property.clone();
+                    let functions_clone = functions.clone();
+                    let node_index = node.index;
+                    thread::spawn(
+                        move || (
+                            p_index,
+                            node_index,
+                            apply_property(&atom_expr_clone, &property_clone, &functions_clone)
+                        )
+                    )
+                }
             );
         }
     }
+    // join all the handles
+    for handle in handles {
+        let (p_index, node_index, new_expressions) = handle.join().unwrap();
+        let property = &properties[p_index];
+        let node = &graph.nodes[node_index];
+        new_nodes.extend(
+            new_expressions.iter().map(|new_expr| (
+                node.clone(),
+                ExprNode {
+                    atom_expr: new_expr.clone(),
+                    parent: 0,
+                    transform: Some(property.clone()),
+                    depth: 0,
+                    index: 0,
+                }
+            ))
+        );
+    }
+    // add new nodes, etc
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
     for (src_node, mut new_node) in new_nodes {
