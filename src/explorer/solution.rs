@@ -7,7 +7,7 @@ use crate::{
         AtomExpr,
         AlgebraicProperty,
         AlgebraicFunction,
-        KProperty, Atom
+        KProperty
     },
     explorer::{
         init_graph,
@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub fn solve_equality(
-    mut properties: Vec<AlgebraicProperty>,
+     properties: Vec<AlgebraicProperty>,
     functions: Vec<AlgebraicFunction>,
     _k_properties: Vec<KProperty>,
     left_expression: &AtomExpr,

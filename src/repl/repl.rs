@@ -9,7 +9,7 @@ use crate::{
         KProperty,
         split_algebraic_objects, Atom
     },
-    solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format}
+    solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format, atom2atom_expr}
 };
 use std::fs;
 use reedline_repl_rs::{
@@ -257,16 +257,13 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) {
     context.properties.extend(
         functions.iter().map(
             |function| AlgebraicProperty {
-                atom_expr_left: AtomExpr {
-                    atoms: vec![
-                        Atom::FunctionCall((
-                            function.name.clone(),
-                            function.atom_expr_left.clone()
-                        )),
-                    ],
-                    operators: Vec::new(),
-                },
-                atom_expr_right: function.atom_expr_right,
+                atom_expr_left: atom2atom_expr(
+                    Atom::FunctionCall((
+                        function.name.clone(),
+                        function.atom_expr_left.clone()
+                    ))
+                ),
+                atom_expr_right: function.atom_expr_right.clone(),
             }
         )
     );
@@ -281,7 +278,6 @@ fn concat_args(args: Values) -> String {
     let mut property_str = String::new();
     for value in args {
         property_str.push_str(value);
-        //property_str.push_str(" ");
     }
     property_str
 }

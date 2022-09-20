@@ -169,14 +169,14 @@ fn print_node_dot_format(node: &ExprNode) -> String {
 }
 
 fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: &Vec<AlgebraicFunction>) -> Vec<AtomExpr> {
-    let mut new_expressions = apply_machted_substitution(
+    let mut new_expressions = match_and_apply(
         src_expr,
         &property.atom_expr_left,
         &property.atom_expr_right,
         functions,
     );
     new_expressions.extend(
-        apply_machted_substitution(
+        match_and_apply(
             src_expr,
             &property.atom_expr_right,
             &property.atom_expr_left,
@@ -187,7 +187,7 @@ fn apply_property(src_expr: &AtomExpr, property: &AlgebraicProperty, functions: 
 }
 
 /// try to match the src_expr to the left_expr, then generate a new expression based on right_expr
-fn apply_machted_substitution(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr, functions: &Vec<AlgebraicFunction>) -> Vec<AtomExpr>
+fn match_and_apply(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr, functions: &Vec<AlgebraicFunction>) -> Vec<AtomExpr>
 {
     // call 'atom_expressions_match' on every expression (src_expr and sub-expression in parentheses)
     let mut new_expressions: Vec<AtomExpr> = Vec::new();
@@ -200,12 +200,14 @@ fn apply_machted_substitution(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr,
         None => (),
     }
     // recursively call 'atom_expressions_match' on the sub-expressions
+    let num_src_atoms = src.atoms.len();
     for (sub_i, sub) in src.atoms.iter().enumerate().filter_map(|(atom_i, atom)| match atom {
-        Atom::Parenthesized(par) => Some((atom_i, par)),
+        Atom::Parenthesized(sub_expr) => Some((atom_i, (*sub_expr).clone())),
+        Atom::FunctionCall(_) if num_src_atoms != 1 => Some((atom_i, atom2atom_expr((*atom).clone()))),
         _ => None,
     }) {
         new_expressions.extend(
-            apply_machted_substitution(sub, left, right, functions)
+            match_and_apply(&sub, left, right, functions)
                 .iter()
                 .map(
                     |sub_tr| {
@@ -229,24 +231,24 @@ fn apply_machted_substitution(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr,
 
 fn atom_expressions_match(
     src_expr: &AtomExpr, // source expression
-    p_expr: &AtomExpr, // expression to match against
+    dest_expr: &AtomExpr, // expression to match against
 ) -> Option<PropertyMapping> {
     // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
     let mut mappings: PropertyMapping = HashMap::new();
     // number of atoms
     let num_src_atoms = src_expr.atoms.len();
-    let num_p_atoms = p_expr.atoms.len();
+    let num_dest_atoms = dest_expr.atoms.len();
     // Match one-by-one (cannot compare lengths bc of things like '...' or generators)
     let mut i = 0;
-    'main_loop: while i < num_src_atoms && i < num_p_atoms
+    'main_loop: while i < num_src_atoms && i < num_dest_atoms
     {
         // compare operators (not for first iteration)
-        if i != 0 && src_expr.operators[i - 1] != p_expr.operators[i - 1] {
+        if i != 0 && src_expr.operators[i - 1] != dest_expr.operators[i - 1] {
             return None;
         }
         // compare atoms
         let atom_a = &src_expr.atoms[i];
-        let atom_b = &p_expr.atoms[i];
+        let atom_b = &dest_expr.atoms[i];
         // println!("atom_a = {}\natom_b = {}\n", atom_a, atom_b);
         // map rest of src_atom to '...'
         if atom_b == &Atom::Extension {
@@ -256,7 +258,7 @@ fn atom_expressions_match(
                     operators: src_expr.operators[i..].to_vec()
                 }
             ));
-            if i + 1 != num_p_atoms {
+            if i + 1 != num_dest_atoms {
                 return None
             }
             return Some(mappings)
@@ -298,7 +300,7 @@ fn atom_expressions_match(
         // go to next (operator, atom) pair
         i += 1;
     }
-    if i != num_src_atoms || i != num_p_atoms {
+    if i != num_src_atoms || i != num_dest_atoms {
         return None
     }
     Some(mappings)
@@ -332,7 +334,6 @@ fn left_to_right_match(
             Atom::Parenthesized(_) |
             Atom::FunctionCall(_) => (true, None),
             _ => todo!()
-            
         },
         Atom::Special(_) => (atom_a == atom_b, None),
         Atom::Extension => todo!(),
@@ -404,8 +405,7 @@ fn generate_new_expression(
                             }
                         }
                         // function is not defined
-                        //
-                        panic!("No function named \"{fn_name}\"");
+                        panic!("No function named \"{fn_name}\"\nFunctions :\n{:?}", functions);
                     }
                     Atom::Generator(gen_expr) => {
                         // check for iterator (must be a numeral, or we can't generate)
@@ -457,6 +457,15 @@ fn generate_new_expression(
         i += 1;
     }
     AtomExpr { atoms, operators }
+}
+
+pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
+    AtomExpr {
+        atoms: vec![
+            atom,
+        ],
+        operators: Vec::new(),
+    }
 }
 
 #[test]
