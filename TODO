@@ -1,13 +1,10 @@
 Todo List :
-- add new properties without using a brace-group
-- use hashmaps or hashsets instead of vectors in the graphs
 - optimize the shit out of everything
 - can use extensions (...) anywhere in an expression e.g.
     * ... + A * B = ... + (A * B)
 - different parsers for generators (separate start & end)
 - enforce operator priority or parentheses
 - use more references, less copies of data (for threads etc)
-- pre-processor which handles comments and imports in the aspl source code
 - proper indentation for tranforms
 - memoization
 - grouping
