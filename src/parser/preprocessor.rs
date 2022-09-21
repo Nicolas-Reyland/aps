@@ -2,7 +2,7 @@
 
 use std::fs;
 
-pub fn read_and_process_file(filename: &str) -> String {
+pub fn read_and_preprocess_file(filename: &str) -> String {
     let mut content = fs::read_to_string(filename).unwrap();
     // remove comments
     content = remove_comments(&content);
@@ -67,5 +67,9 @@ pub fn remove_comments(src: &str) -> String {
 }
 
 fn run_macros(src: &str) -> String {
+    /* e.g.
+        #use numbers.aspl
+        #
+     */
     src.to_string() // TODO
 }

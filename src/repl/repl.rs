@@ -9,7 +9,7 @@ use crate::{
         KProperty,
         split_algebraic_objects, Atom
     },
-    solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format, atom2atom_expr}, preprocessor::read_and_process_file
+    solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format, atom2atom_expr}, preprocessor::read_and_preprocess_file
 };
 use reedline_repl_rs::{
     Repl,
@@ -232,7 +232,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
 
 pub fn import_into_context(context: &mut ReplContext, filename: &str) {
     // read file
-    let content = read_and_process_file(filename);
+    let content = read_and_preprocess_file(filename);
     let content_box: Box<String> = Box::new(content);
     // parse input context
     let alg_objects = match parser::root::<parser::ApsParserKind>(
