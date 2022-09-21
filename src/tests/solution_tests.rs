@@ -6,7 +6,7 @@ use crate::{solution::solve_equality, repl::str2atom_expr, aps_parser::{AtomExpr
 #[test]
 fn test_x_y_z_solution() {
     let mut context = init_context();
-    import_into_context(&mut context, "examples/numbers.aps");
+    import_into_context(&mut context, "examples/numbers.apsl");
     let left = str2atom_expr("X + Y + Z");
     let right = str2atom_expr("Z + Y + X");
     assert_eq!(

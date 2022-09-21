@@ -1,2 +1,2 @@
-# aps-lang
-Alegbraic Proof System
+# apsl-lang
+Algebraic Proofing System Language
