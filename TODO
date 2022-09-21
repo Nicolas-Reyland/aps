@@ -7,5 +7,7 @@ Todo List :
 - different parsers for generators (separate start & end)
 - enforce operator priority or parentheses
 - use more references, less copies of data (for threads etc)
+- pre-processor which handles comments and imports in the aspl source code
+- proper indentation for tranforms
 
 Urgent Fix List :
