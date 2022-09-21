@@ -1,25 +1,56 @@
+// Rules of +, - and * on real numbers
 
-K :: N ;
+K :: R ;
 
 + :: {
+    // Commutativity
     A + B = B + A ;
-    A + B + ... = (A + B) + ... ;
+    // Associativity
     (A + B) + C = A + (B + C) ;
+    // Value '0'
     A + 0 = A ;
+    // Grouping (will be deprecated soon)
+    A + B + ... = (A + B) + ... ;
+}
+
+- :: {
+    // Commutativity
+    A - B = B - A ;
+    // Value '0'
+    A - 0 = A ;
+    // inverse of the inverse
+    0 - (0 - A) = A ;
 }
 
 * :: {
+    // Commutativity
     A * B = B * A ;
-    A * B * ... = (A * B) * ... ;
+    // Associativity
     (A * B) * C = A * (B * C) ;
+    // Value '1'
     1 * ... = ... ;
+    // Value '0'
     A * 0 = 0 ;
+    // Grouping (will be deprecated soon)
+    A * B * ... = (A * B) * ... ;
 }
 
 ^ :: {
+    // generate multiplications
     A ^ N = 1 $ * A $ # N ;
+    // Value '0'
+    A ^ 0 = 1 ;
+    // Value '1'
+    A ^ 1 = A ;
+    // generate exponents
+    A * (A ^ N) = A ^ (N + 1) ;
+    // Additional rules on ^
+    (A ^ K) * (A ^ P) = A ^ (K + P) ;
+    (A ^ K) * (B ^ K) = (A * B) ^ K ;
 }
 
 _ :: {
+    // Distributivity
     A * (B + C) = (A * B) + (A * C) ;
+    A * (B - C) = (A * B) - (A * C) ;
 }
