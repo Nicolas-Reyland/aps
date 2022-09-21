@@ -11,5 +11,6 @@ Todo List :
 - proper indentation for tranforms
 - memoization
 - grouping
+- detect import-cycles without (avoid infinite import-loop)
 
 Urgent Fix List :

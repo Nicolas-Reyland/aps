@@ -233,7 +233,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
 pub fn import_into_context(context: &mut ReplContext, filename: &str) {
     // read file
     let content = read_and_preprocess_file(filename);
-    let content_box: Box<String> = Box::new(content);
+    let content_box = Box::new(content);
     // parse input context
     let alg_objects = match parser::root::<parser::ApsParserKind>(
         &content_box
