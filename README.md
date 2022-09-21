@@ -120,15 +120,17 @@ Which gives us a proof, using the rules we have defined :
 ```
 Solution found for '(X + Y) ^ 2 = (X * X) + (2 * (X * Y)) + (Y * Y)' :
   (X + Y) ^ 2
- = 1 * (X + Y) * (X + Y)                        |       A ^ N = 1 } $ * A $ # N
- = (1 * (X + Y)) * (X + Y)                      |       A * B * ... = (A * B) * ...
- = ((1 * X) + (1 * Y)) * (X + Y)                |       A * (B + C) = (A * B) + (A * C)
- = (2 * (1 * Y)) * (X + Y)                      |       (A * B) + (A * B) = 2 * (A * B)
- = (2 * Y) * (X + Y)                            |       1 * ... = ...
- = (X * X) + ((2 * Y) * Y)                      |       A * (B + C) = (A * B) + (A * C)
- = (X * X) + (2 * (Y * Y))                      |       (A * B) * C = A * (B * C)
- = (X * X) + ((2 * (X * Y)) + (Y * Y))          |       (A * B) + (A * B) = 2 * (A * B)
- = ((X * X) + (2 * (X * Y))) + (Y * Y)          |       (A + B) + C = A + (B + C)
- = (X * X) + (2 * (X * Y)) + (Y * Y)            |       A + B + ... = (A + B) + ...
+ = 1 * (X + Y) * (X + Y)                                |       A ^ N = 1 } $ * A $ # N
+ = (X + Y) * (X + Y)                                    |       1 * ... = ...
+ = ((X + Y) * X) + ((X + Y) * Y)                        |       A * (B + C) = (A * B) + (A * C)
+ = (X * (X + Y)) + ((X + Y) * Y)                        |       A * B = B * A
+ = (X * (X + Y)) + (Y * (X + Y))                        |       A * B = B * A
+ = ((X * X) + (X * Y)) + (Y * (X + Y))                  |       A * (B + C) = (A * B) + (A * C)
+ = ((X * X) + (X * Y)) + ((Y * X) + (Y * Y))            |       A * (B + C) = (A * B) + (A * C)
+ = ((X * X) + (X * Y)) + ((X * Y) + (Y * Y))            |       A * B = B * A
+ = (((X * X) + (X * Y)) + (X * Y)) + (Y * Y)            |       (A + B) + C = A + (B + C)
+ = ((X * X) + ((X * Y) + (X * Y))) + (Y * Y)            |       (A + B) + C = A + (B + C)
+ = ((X * X) + (2 * (X * Y))) + (Y * Y)                  |       (A * B) + (A * B) = 2 * (A * B)
+ = (X * X) + (2 * (X * Y)) + (Y * Y)                    |       A + B + ... = (A + B) + ...
 
 ```
