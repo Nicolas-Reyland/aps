@@ -9,5 +9,6 @@ Todo List :
 - use more references, less copies of data (for threads etc)
 - pre-processor which handles comments and imports in the aspl source code
 - proper indentation for tranforms
+- memoization
 
 Urgent Fix List :
