@@ -295,7 +295,15 @@ fn atom_expressions_match(
                 true,
                 Some(par_mappings)
             ) => {
-                mappings.extend(par_mappings);
+                for (key, value) in par_mappings {
+                    match mappings.insert(key, value.clone()) {
+                        None => (),
+                        Some(old_value) => if value != old_value {
+                            // old value is different from new value
+                            return None
+                        },
+                    }
+                }
                 i += 1;
                 continue 'main_loop
             },

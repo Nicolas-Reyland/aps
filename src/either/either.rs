@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-#[derive(Debug, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Either<L, R> {
     Left(L),
     Right(R),
@@ -20,4 +20,3 @@ where
         }
     }
 }
-
