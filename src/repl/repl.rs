@@ -41,10 +41,10 @@ pub fn init_context() -> ReplContext {
 
 pub fn repl(context: ReplContext) {
     let mut repl = Repl::new(context)
-        .with_name("Algebraic Proofing System ")
+        .with_name("Algebraic Proof System Language ")
         .with_version("v0.1.0")
-        .with_description("Prove algebraic statements using a set of predefined rules")
-        .with_banner("REPL for the Algebraic Proofing System Language")
+        .with_description("Prove algebraic statements using algebraic structures definitions")
+        .with_banner("REPL for the Algebraic Proof System Language")
         .with_command(
             Command::new("prove")
                 .arg(Arg::with_name("property")
