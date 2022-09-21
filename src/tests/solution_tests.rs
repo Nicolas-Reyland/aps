@@ -2,7 +2,7 @@
 
 use super::*;
 #[allow(unused_imports)]
-use crate::{solution::solve_equality, repl::str2atom_expr, aps_parser::{AtomExpr, Operator, Atom, AlgebraicProperty}};
+use crate::{solution::solve_equality, repl::str2atom_expr, parser::{AtomExpr, Operator, Atom, AlgebraicProperty}};
 
 #[test]
 fn test_x_y_z_solution() {

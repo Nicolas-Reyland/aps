@@ -3,7 +3,7 @@
 use std::{collections::HashMap, fmt, vec, thread::{JoinHandle, self}};
 
 use crate::{
-    aps_parser::{self, AtomExpr, AlgebraicProperty, Atom, Operator, parenthesized_atom, GeneratorElement, AlgebraicFunction},
+    parser::{self, AtomExpr, AlgebraicProperty, Atom, Operator, parenthesized_atom, GeneratorElement, AlgebraicFunction},
     either::Either,
 };
 
@@ -27,7 +27,7 @@ type ExprNodeIndex = usize;
 
 #[derive(Debug, Clone, Hash)]
 pub struct ExprNode {
-    pub atom_expr: aps_parser::AtomExpr,
+    pub atom_expr: parser::AtomExpr,
     pub transform: Option<AlgebraicProperty>,
     pub parent: ExprNodeIndex,
     pub index: ExprNodeIndex,
@@ -426,7 +426,7 @@ fn generate_new_expression(
             atoms.push(
                 match atom_v {
                     Atom::Parenthesized(par_v) => {
-                        aps_parser::parenthesized_atom(generate_new_expression(par_v, mappings, functions))
+                        parser::parenthesized_atom(generate_new_expression(par_v, mappings, functions))
                     },
                     Atom::Special(_) => atom_v.clone(),
                     Atom::FunctionCall((fn_name, _)) => {
@@ -501,7 +501,7 @@ pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
 
 #[test]
 fn test_some_things() {
-    let src_expr = match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
+    let src_expr = match parser::atom_expr_p::<parser::ApsParserKind>(
         "(X + Y) + Z"
     ) {
         Ok(("", expr)) => expr,
@@ -512,12 +512,12 @@ fn test_some_things() {
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err)
     };
-    let property = match aps_parser::root::<aps_parser::ApsParserKind>(
+    let property = match parser::root::<parser::ApsParserKind>(
         "+ :: { (A + B) + C = A + (B + C) ; }"
     ) {
         Ok(("", parsed)) => match parsed.first().unwrap() {
-            aps_parser::AlgebraicObject::PropertyGroup(
-                aps_parser::BraceGroup { properties, operator: _ }
+            parser::AlgebraicObject::PropertyGroup(
+                parser::BraceGroup { properties, operator: _ }
             ) => properties.first().unwrap().clone(),
             _ => panic!("No a brace group:\n{:#?}\n", parsed),
         },

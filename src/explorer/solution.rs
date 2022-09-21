@@ -3,7 +3,7 @@
 use std::{thread, sync::{Mutex, Arc}};
 
 use crate::{
-    aps_parser::{
+    parser::{
         AtomExpr,
         AlgebraicProperty,
         AlgebraicFunction,

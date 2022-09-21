@@ -1,7 +1,7 @@
 // APS Repl
 
 use crate::{
-    aps_parser::{
+    parser::{
         self,
         AtomExpr,
         AlgebraicFunction,
@@ -9,9 +9,8 @@ use crate::{
         KProperty,
         split_algebraic_objects, Atom
     },
-    solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format, atom2atom_expr}
+    solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format, atom2atom_expr}, preprocessor::read_and_process_file
 };
-use std::fs;
 use reedline_repl_rs::{
     Repl,
     Result,
@@ -146,7 +145,7 @@ fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<S
         mut functions,
         mut k_properties,
     ) = split_algebraic_objects(
-        match aps_parser::root::<aps_parser::ApsParserKind>(&body_str) {
+        match parser::root::<parser::ApsParserKind>(&body_str) {
             Ok(("", objects)) => objects,
             Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
             Err(err) => return Ok(Some(format!(" Error occured while parsing :{}\n", err))),
@@ -192,7 +191,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         property_str.push_str(";;");
     }
     // parse the expression
-    let property = match aps_parser::property_p::<aps_parser::ApsParserKind>(&property_str) {
+    let property = match parser::property_p::<parser::ApsParserKind>(&property_str) {
         Ok((_, property)) => property,
         Err(err) => {
             eprint!(" Error in parsing property: {}", err);
@@ -233,10 +232,10 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
 
 pub fn import_into_context(context: &mut ReplContext, filename: &str) {
     // read file
-    let content = fs::read_to_string(filename).unwrap();
+    let content = read_and_process_file(filename);
     let content_box: Box<String> = Box::new(content);
     // parse input context
-    let alg_objects = match aps_parser::root::<aps_parser::ApsParserKind>(
+    let alg_objects = match parser::root::<parser::ApsParserKind>(
         &content_box
     ) {
         Ok(("", algebraic_objects)) => algebraic_objects,
@@ -283,7 +282,7 @@ fn concat_args(args: Values) -> String {
 }
 
 pub fn str2atom_expr(input: &str) -> AtomExpr {
-    match aps_parser::atom_expr_p::<aps_parser::ApsParserKind>(
+    match parser::atom_expr_p::<parser::ApsParserKind>(
         input
     ) {
         Ok(("", expr)) => expr,
