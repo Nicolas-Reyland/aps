@@ -10,5 +10,6 @@ Todo List :
 - pre-processor which handles comments and imports in the aspl source code
 - proper indentation for tranforms
 - memoization
+- grouping
 
 Urgent Fix List :
