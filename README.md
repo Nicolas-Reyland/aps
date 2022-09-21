@@ -78,7 +78,7 @@ Then, we're going to define a rule about the `*` operation (we could define a mo
 ```
 Algebraic Proof System Language 〉def _ :: { (A * B) + (A * B) = 2 * (A * B) ; }
 ```
-Which should output :
+Which outputs :
 ```
  Added object(s) to context.
 ```
