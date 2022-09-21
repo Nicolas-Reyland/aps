@@ -1,6 +1,7 @@
 #[cfg(test)]
 
 use super::*;
+#[allow(unused_imports)]
 use crate::{solution::solve_equality, repl::str2atom_expr, aps_parser::{AtomExpr, Operator, Atom, AlgebraicProperty}};
 
 #[test]
