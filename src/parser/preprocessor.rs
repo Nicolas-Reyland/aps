@@ -2,12 +2,12 @@
 
 use std::fs;
 
-pub fn read_and_preprocess_file(filename: &str) -> String {
+pub fn read_and_preprocess_file(filename: &str, imports: Option<Vec<&str>>) -> String {
     let mut content = fs::read_to_string(filename).unwrap();
     // remove comments
     content = remove_comments(&content);
     // run macros
-    process_macros(&content)
+    process_macros(&content, imports)
 }
 
 pub fn remove_comments(src: &str) -> String {
@@ -66,7 +66,7 @@ pub fn remove_comments(src: &str) -> String {
     new_src
 }
 
-pub fn process_macros(src: &str) -> String {
+pub fn process_macros(src: &str, imports: Option<Vec<&str>>) -> String {
     /* e.g.
         #use numbers.apsl
         #
@@ -90,11 +90,11 @@ pub fn process_macros(src: &str) -> String {
             next_c = match src_chars.next() {
                 Some(c) => c,
                 // content of file is only a macro instruction (not even new-line char)
-                None => return expand_macro(&macro_str),
+                None => return expand_macro(&macro_str, imports),
             }
         }
         c1 = next_c; // next_c == '\n'
-        new_src = expand_macro(&macro_str);
+        new_src = expand_macro(&macro_str, imports.clone());
         c2 = match src_chars.next() {
             Some(c) => c,
             None => {
@@ -114,13 +114,13 @@ pub fn process_macros(src: &str) -> String {
                 next_c = match src_chars.next() {
                     Some(c) => c,
                     None => {
-                        new_src.push_str(&expand_macro(&macro_str));
+                        new_src.push_str(&expand_macro(&macro_str, imports.clone()));
                         // file ends with a macro instruction, without a trailing '\n'
                         return new_src;
                     },
                 }
             }
-            new_src.push_str(&expand_macro(&macro_str));
+            new_src.push_str(&expand_macro(&macro_str, imports.clone()));
             c1 = next_c; // next_c == '\n'
             c2 = match src_chars.next() {
                 Some(c) => c,
@@ -138,7 +138,7 @@ pub fn process_macros(src: &str) -> String {
     new_src
 }
 
-fn expand_macro(macro_str: &str) -> String {
+fn expand_macro(macro_str: &str, imports: Option<Vec<&str>>) -> String {
     if macro_str.starts_with("#use ") {
         let mut content = String::new();
         let filenames_str = macro_str[4..].to_string();
@@ -147,7 +147,19 @@ fn expand_macro(macro_str: &str) -> String {
             if filename.is_empty() {
                 continue;
             }
-            content.push_str(&read_and_preprocess_file(filename));
+            // test for import-cycle
+            if imports.is_some() && imports.as_ref().unwrap().contains(&filename) {
+                panic!(
+                    "Import cycle detected for {filename} : {:?}", imports.unwrap()
+                )
+            }
+            content.push_str(&read_and_preprocess_file(filename, match imports.clone() {
+                Some(mut imports) => {
+                    imports.push(&filename);
+                    Some(imports)
+                },
+                None => Some(vec![&filename]),
+            }));
             // to separate file contents (which might not even end with a new-line char)
             content.push('\n');
         }
