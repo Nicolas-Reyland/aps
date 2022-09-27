@@ -95,6 +95,12 @@ pub fn explore_graph(
         |node| node.depth == graph.max_depth
     ) {
         for (p_index, property) in properties.iter().enumerate() {
+            match &node.transform {
+                Some(node_transform) => if node_transform == property {
+                    continue
+                },
+                None => (),
+            }
             handles.push(
                 {
                     let atom_expr_clone = node.atom_expr.clone();
