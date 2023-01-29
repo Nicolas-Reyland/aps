@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+divrem = "1.0.0"
 nom = "7"
 reedline-repl-rs = "1.0.2"

@@ -5,7 +5,6 @@ Todo List :
 - different parsers for generators (separate start & end)
 - enforce operator priority or parentheses
 - use more references, less copies of data (for threads etc)
-- proper indentation for tranforms
 - memoization
 - grouping
 

@@ -23,6 +23,9 @@ use reedline_repl_rs::{
         parser::ValuesRef,
     }
 };
+use divrem::DivCeil;
+
+static TAB_WIDTH: usize = 8;
 
 #[derive(Default, Clone)]
 pub struct ReplContext {
@@ -222,19 +225,51 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
     solution_str.push_str(&format!(
         "  {}\n", first_expr
     ));
-    for (step_expr, step_tr) in solution.iter().skip(1) {
+    if solution.len() < 2 {
+        return Ok(Some(solution_str));
+    }
+    // length of the lengthiest expression
+    let mut max_expr_length: usize = 0;
+    // stringify expressions and rules (setting max_expr_length at the same time)
+    let solution_contents: Vec<(String, String)> = solution.iter().skip(1).map(|(expr, rule)| {
+        let expr_str = expr.to_string();
+        let rule_str = match rule {
+            Some(r) => r.to_string(),
+            None => "?".to_string(),
+        };
+        // update max_expr_length if needed
+        let expr_length = expr_str.len();
+        if expr_length > max_expr_length {
+            max_expr_length = expr_length;
+        }
+        (expr_str, rule_str.clone())
+    }).collect::<Vec<_>>();
+    // max number of tabs
+    let max_num_tabs = compute_num_tabs(max_expr_length);
+    // Concatenating these into the solution_str
+    for (expr_str, rule_str) in solution_contents {
         solution_str.push_str(
             &format!(
-                " = {}\t\t|\t{}\n",
-                step_expr,
-                match step_tr {
-                    Some(tr) => tr.to_string(),
-                    None => "?".to_string()
-                }
+                " = {}{}|\t{} \n",
+                expr_str,
+                (0..compute_rel_num_tabs(expr_str.len(), max_num_tabs)).map(|_| "\t").collect::<String>().as_str(),
+                rule_str,
             )
         );
     }
     Ok(Some(solution_str))
+}
+
+fn compute_num_tabs(str_len: usize) -> usize {
+    // + 3: " = " prefix for each expression
+    // + 1: if an expression ends exactly at the end of a tab,
+    //      an extra tab would be added
+    DivCeil::div_ceil(str_len + 3 + 1, TAB_WIDTH)
+}
+
+fn compute_rel_num_tabs(expr_length: usize, max_num_tabs: usize) -> usize {
+    let num_tabs = compute_num_tabs(expr_length);
+    return 1 + max_num_tabs - num_tabs;
 }
 
 pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
