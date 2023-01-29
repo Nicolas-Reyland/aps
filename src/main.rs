@@ -1,7 +1,7 @@
 /* Parser for Algebraic Proofing System Language */
 
 use std::env;
-use repl::{init_context, import_into_context};
+use repl::{init_context, import_into_context/*, solve_equality_str*/};
 
 #[path = "parser/parser.rs"] mod parser;
 #[path = "parser/preprocessor.rs"] pub(crate) mod preprocessor;
@@ -28,6 +28,7 @@ fn main() {
             println!(" failed to import '{}'", filename);
         }
     }
+    // println!("{:?}", solve_equality_str("A + B = B + A ;;".to_string(), &mut context));
     // start a repl
     repl::repl(context);
 }

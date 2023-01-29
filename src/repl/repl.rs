@@ -91,37 +91,38 @@ pub fn repl(context: ReplContext) {
             rule_callback
         )
         .with_command(
-            Command::new("ctx")
-            .arg(Arg::new("break-status")
+            Command::new("settings")
+            .arg(Arg::new("command")
                 .required(false)
-                .num_args(0..)
+                .num_args(1)
             )
-            .about("Print the current context, or set the break-status (auto/no-break)"),
+            .about("Print or set the break-status (auto/no-break, show)"),
+            settings_callback
+        )
+        .with_command(
+            Command::new("ctx")
+            .arg(Arg::new("command")
+                .required(false)
+                .num_args(1)
+            )
+            .about("Print or clear the current context (show, clear)"),
             ctx_callback
         );
     repl.run().unwrap();
 }
 
 fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    // look for sub-command
-    let break_status_id: String = "break-status".to_string();
-    let break_status_change = args.contains_id(&break_status_id);
-    if break_status_change {
-        let break_status = args.get_one::<String>(&break_status_id).unwrap();
-        let auto_break = match break_status.as_str() {
-            "auto-break" => true,
-            "no-break" => false,
-            s => return Ok(Some(format!(" Break-status '{}' is not valid ('auto-break' or 'no-break')", s))),
-        };
-        if auto_break {
-            // activating auto-break
+    match args.get_one::<String>("command").unwrap_or(&"show".to_string()).as_str() {
+        "clear" => {
+            context.properties.clear();
+            context.functions.clear();
+            context.k_properties.clear();
             context.auto_break = true;
-            return Ok(Some(" Activated auto-break.".to_string()))
-        }
-        // deactivating auto-break (no-break)
-        context.auto_break = false;
-        return Ok(Some(" Deactivated auto-break.".to_string()))
-    }
+            return Ok(Some(" Cleared context\n".to_string()))
+        },
+        "show" | "" => (),
+        command => return Ok(Some(format!(" Unknown ctx command: {} ('show' or 'clear')", command))),
+    };
     // print the context contents
     let mut content = " Properties :\n".to_owned();
     // properties
@@ -143,6 +144,24 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
         "\n Auto break : {}\n", context.auto_break
     ));
     Ok(Some(content))
+}
+
+fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
+    match args.get_one::<String>("command").unwrap_or(&"show".to_string()).as_str() {
+        "auto-break" => {
+            context.auto_break = true;
+            Ok(Some(" Activated auto-break.".to_string()))
+        },
+        "no-break" => {
+            context.auto_break = false;
+            Ok(Some(" Deactivated auto-break.".to_string()))
+        },
+        "show" => Ok(Some(String::from(match context.auto_break {
+            true => " Auto-break is activated",
+            false => " Auto-break is not activated",
+        }))),
+        command => Ok(Some(format!(" Command {} is not valid (auto/no-break, show)", command))),
+    }
 }
 
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
@@ -171,7 +190,7 @@ fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
     let expression = str2atom_expr(&expression_str);
     let mut graph = init_graph(expression);
     // number of explorations
-    let depth = args.get_one::<& str>("num explorations").unwrap().parse::<u8>()?;
+    let depth = args.get_one::<String>("num explorations").unwrap().parse::<u8>()?;
     for _ in 0..depth {
         if ! explore_graph(&mut graph, &context.properties, &context.functions) {
             break;
@@ -200,14 +219,19 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
     if ! property_str.ends_with(";; ") {
         property_str.push_str(";;");
     }
+    Ok(solve_equality_str(property_str, context))
+}
+
+pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Option<String> {
     // parse the expression
     let property = match parser::property_p::<parser::ApsParserKind>(&property_str) {
         Ok((_, property)) => property,
         Err(err) => {
             eprint!(" Error in parsing property: {}", err);
-            return Ok(None)
+            return None
         }
     };
+    // solve the equation
     let solution = match solve_equality(
         context.properties.clone(),
         context.functions.clone(),
@@ -217,7 +241,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         context.auto_break,
     ) {
         Some(solution) => solution,
-        None => return Ok(Some(format!(" No solution found for {}", property)))
+        None => return Some(format!(" No solution found for {}", property))
     };
     // build solution string
     let mut solution_str = format!(" Solution found for '{}' :\n", property);
@@ -226,7 +250,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         "  {}\n", first_expr
     ));
     if solution.len() < 2 {
-        return Ok(Some(solution_str));
+        return Some(solution_str);
     }
     // length of the lengthiest expression
     let mut max_expr_length: usize = 0;
@@ -257,7 +281,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
             )
         );
     }
-    Ok(Some(solution_str))
+    Some(solution_str)
 }
 
 fn compute_num_tabs(str_len: usize) -> usize {
