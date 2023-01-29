@@ -248,7 +248,7 @@ fn match_and_apply(src: &AtomExpr, left: &AtomExpr, right: &AtomExpr, functions:
                         src_atoms_prefix.extend(src_atoms_suffix);
                         AtomExpr {
                             atoms: src_atoms_prefix,
-                            operators: src.operators.clone(),
+                            operator: src.operator.clone(),
                         }
                     }
                 )
@@ -267,14 +267,14 @@ fn atom_expressions_match(
     // number of atoms
     let num_src_atoms = src_expr.atoms.len();
     let num_dest_atoms = dest_expr.atoms.len();
+    // check the two operators
+    if src_expr.operator != dest_expr.operator {
+        return None;
+    }
     // Match one-by-one (cannot compare lengths bc of things like '...' or generators)
     let mut i = 0;
     'main_loop: while i < num_src_atoms && i < num_dest_atoms
     {
-        // compare operators (not for first iteration)
-        if i != 0 && src_expr.operators[i - 1] != dest_expr.operators[i - 1] {
-            return None;
-        }
         // compare atoms
         let atom_a = &src_expr.atoms[i];
         let atom_b = &dest_expr.atoms[i];
@@ -284,7 +284,7 @@ fn atom_expressions_match(
             mappings.insert(atom_b.clone(), Either::Right(
                 AtomExpr {
                     atoms: src_expr.atoms[i..].to_vec(),
-                    operators: src_expr.operators[i..].to_vec()
+                    operator: src_expr.operator.clone(),
                 }
             ));
             if i + 1 != num_dest_atoms {
@@ -399,9 +399,9 @@ fn generate_new_expression(
     mappings: &PropertyMapping,
     functions: &Vec<AlgebraicFunction>,
 ) -> AtomExpr {
-    // init new atoms and operators
+    // init new atoms and operator
     let mut atoms: Vec<Atom> = Vec::new();
-    let mut operators: Vec<Operator> = Vec::new();
+    let mut operator: Option<Operator> = None;
     // match each atom of the v-expr
     let num_v_atoms = v_expr.atoms.len();
     let mut i = 0;
@@ -409,10 +409,6 @@ fn generate_new_expression(
     'main_loop: while i < num_v_atoms
     {
         let atom_v = &v_expr.atoms[i];
-        // immediately add operator
-        if i != 0 && v_expr.operators[i - 1].op != '{' {
-            operators.push(v_expr.operators[i - 1].clone());
-        }
         // expand extension expressions
         if atom_v == &Atom::Extension {
             let sub_expr: AtomExpr = match mappings.get(&Atom::Extension) {
@@ -426,7 +422,7 @@ fn generate_new_expression(
                 )
             };
             atoms.extend(sub_expr.atoms);
-            operators.extend(sub_expr.operators);
+            operator = sub_expr.operator;
         } else {
             // normal mapping
             atoms.push(
@@ -450,7 +446,9 @@ fn generate_new_expression(
                             Some(Either::Left(Atom::Special(c))) => c.to_digit(10),
                             _ => panic!("Iterator value was not a special value for generator expression.\natom_v: {atom_v}, expr_v: {v_expr}\nMappings :{:#?}\n", mappings),
                         }.unwrap();
+                        todo!("Generator expressions not handled yet");
                         // remove the special operator ('{' or '}')
+                        /*
                         if ! operators.is_empty() {
                             if operators.last().unwrap().op == '}' {
                                 operators.pop().unwrap();
@@ -462,7 +460,7 @@ fn generate_new_expression(
                         // get mappings for the atoms inside the generator-expression
                         let vec_capacity = gen_expr.elements.len() / 2;
                         let mut mapped_atoms: Vec<Atom> = Vec::with_capacity(vec_capacity);
-                        let mut gen_operators: Vec<Operator> = Vec::with_capacity(vec_capacity);
+                        let mut gen_operator: Option<Operator> = None;
                         for gen_element in &gen_expr.elements {
                             match gen_element {
                                 GeneratorElement::GenAtom(atom) => {
@@ -476,12 +474,13 @@ fn generate_new_expression(
                             }
                         }
                         // generate part of the expression
+                        operator = gen_operator;
                         for _ in 0..num_iterations {
                             atoms.extend(mapped_atoms.clone());
-                            operators.extend(gen_operators.clone());
                         }
                         i += num_iterations as usize;
                         continue 'main_loop;
+                        */
                     }
                     _ => match mappings.get(atom_v) {
                         Some(Either::Left(atom)) => atom.clone(),
@@ -493,7 +492,7 @@ fn generate_new_expression(
         }
         i += 1;
     }
-    AtomExpr { atoms, operators }
+    AtomExpr { atoms, operator }
 }
 
 pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
@@ -501,7 +500,7 @@ pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
         atoms: vec![
             atom,
         ],
-        operators: Vec::new(),
+        operator: None,
     }
 }
 

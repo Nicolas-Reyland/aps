@@ -92,18 +92,19 @@ impl fmt::Display for Operator {
 #[derive(Debug, Clone, Hash, Eq)]
 pub struct AtomExpr {
     pub atoms: Vec<Atom>,
-    pub operators: Vec<Operator>,
+    // There is only one operator : A + B * C is actually A + (B * C)
+    // since oeprator precedence is not inherently known
+    pub operator: Option<Operator>,
 }
 
 impl PartialEq for AtomExpr {
     fn eq(&self, other: &Self) -> bool {
         let num_atoms = self.atoms.len();
-        if num_atoms != other.atoms.len() {
+        if num_atoms != other.atoms.len() || self.operator != other.operator {
             return false;
         }
         for i in 0..num_atoms-1 {
-            if self.atoms[i] != other.atoms[i] ||
-                self.operators[i] != other.operators[i]
+            if self.atoms[i] != other.atoms[i]
             {
                 return false;
             }
@@ -114,10 +115,9 @@ impl PartialEq for AtomExpr {
 
 impl fmt::Display for AtomExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let num_operators = self.operators.len();
         write!(f, "{}", self.atoms[0])?;
-        for i in 0..num_operators {
-            write!(f, " {} {}", self.operators[i], self.atoms[i + 1])?;
+        for atom in self.atoms.iter().skip(1) {
+            write!(f, " {:?} {}", self.operator, atom)?;
         }
         Ok(())
     }
@@ -493,7 +493,7 @@ fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) ->
 /// big_atom : atom_expr_start* atom atom_expr_end*
 fn big_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str
-) -> IResult<&'i str, (Vec<Atom>, Vec<Operator>), E> {
+) -> IResult<&'i str, (Vec<Atom>, Option<Operator>), E> {
     context(
         "big atom",
         map(
@@ -504,18 +504,26 @@ fn big_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             )),
             |(starts, middle, ends)| {
                 let mut atoms: Vec<Atom> = Vec::new();
-                let mut operators: Vec<Operator> = Vec::new();
+                let mut operator: Option<Operator> = None;
                 // stick the vectors together
-                for (atom, op) in starts {
+                for (atom, op) in starts.clone() {
                     atoms.push(atom);
-                    operators.push(op);
+                    if operator == None {
+                        operator = Some(op);
+                    } else if operator != Some(op.clone()) {
+                        panic!("Two types of operators in the same AtomExpr {:?} and {:?} in {:?}", operator, op.clone(), starts);
+                    }
                 }
                 atoms.push(middle);
-                for (op, atom) in ends {
+                for (op, atom) in ends.clone() {
                     atoms.push(atom);
-                    operators.push(op);
+                    if operator == None {
+                        operator = Some(op);
+                    } else if operator != Some(op.clone()) {
+                        panic!("Two types of operators in the same AtomExpr {:?} and {:?} in {:?}", operator, op.clone(), ends);
+                    }
                 }
-                (atoms, operators)
+                (atoms, operator)
             }
         )
     )(input)
@@ -575,21 +583,19 @@ pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                     ))
                 )
             )),
-            |((mut atoms, mut operators), rest)| {
+            |((mut atoms, mut operator), rest)| {
                 // stick everything together
-                for (op, (mut atoms2, mut operators2)) in rest {
-                    operators.push(op);
-                    atoms.append(
-                        &mut atoms2
-                    );
-                    operators.append(
-                        &mut operators2
-                    );
+                for (op, (mut atoms2, mut operator2)) in rest.clone() {
+                    // Add the atoms
+                    atoms.append(&mut atoms2);
+                    // Check for an operator update or operator error
+                    if operator == None {
+                        operator = Some(op);
+                    } else if operator != Some(op.clone()) {
+                        panic!("Two types of operators in the same AtomExpr {:?} and {:?} in {:?}", operator, op, rest);
+                    }
                 }
-                AtomExpr {
-                    atoms,
-                    operators,
-                }
+                AtomExpr { atoms, operator }
             }
         )
     )(input)
@@ -613,15 +619,20 @@ pub fn simple_atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             )),
             |(first_atom, rest)| {
                 let mut atoms: Vec<Atom> = vec![first_atom];
-                let mut operators: Vec<Operator> = Vec::new();
+                let mut operator: Option<Operator> = None;
                 // stick everything together
-                for (op, atom) in rest {
+                for (op, atom) in rest.clone() {
                     atoms.push(atom);
-                    operators.push(op);
+                    // Check for an operator update or operator error
+                    if operator == None {
+                        operator = Some(op);
+                    } else if operator != Some(op.clone()) {
+                        panic!("Two types of operators in the same AtomExpr {:?} and {:?} in {:?}", operator, op, rest);
+                    }
                 }
                 AtomExpr {
                     atoms,
-                    operators,
+                    operator,
                 }
             }
         )

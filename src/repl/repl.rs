@@ -269,6 +269,7 @@ fn compute_num_tabs(str_len: usize) -> usize {
 
 fn compute_rel_num_tabs(expr_length: usize, max_num_tabs: usize) -> usize {
     let num_tabs = compute_num_tabs(expr_length);
+    // + 1: at least one tab
     return 1 + max_num_tabs - num_tabs;
 }
 
