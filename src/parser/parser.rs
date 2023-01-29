@@ -116,8 +116,12 @@ impl PartialEq for AtomExpr {
 impl fmt::Display for AtomExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.atoms[0])?;
+        let operator_str = match &self.operator {
+            Some(operator) => operator.op,
+            None => '?',
+        };
         for atom in self.atoms.iter().skip(1) {
-            write!(f, " {:?} {}", self.operator, atom)?;
+            write!(f, " {} {}", operator_str, atom)?;
         }
         Ok(())
     }
@@ -585,13 +589,13 @@ pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             )),
             |((mut atoms, mut operator), rest)| {
                 // stick everything together
-                for (op, (mut atoms2, mut operator2)) in rest.clone() {
+                for (op, (mut atoms2, operator2)) in rest.clone() {
                     // Add the atoms
                     atoms.append(&mut atoms2);
                     // Check for an operator update or operator error
                     if operator == None {
                         operator = Some(op);
-                    } else if operator != Some(op.clone()) {
+                    } else if operator != Some(op.clone()) || operator != operator2 {
                         panic!("Two types of operators in the same AtomExpr {:?} and {:?} in {:?}", operator, op, rest);
                     }
                 }

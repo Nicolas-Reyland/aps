@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub fn solve_equality(
-     properties: Vec<AlgebraicProperty>,
+    properties: Vec<AlgebraicProperty>,
     functions: Vec<AlgebraicFunction>,
     _k_properties: Vec<KProperty>,
     left_expression: &AtomExpr,
