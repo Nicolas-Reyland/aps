@@ -123,21 +123,30 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
         "show" | "" => (),
         command => return Ok(Some(format!(" Unknown ctx command: {} ('show' or 'clear')", command))),
     };
-    // print the context contents
-    let mut content = " Properties :\n".to_owned();
+    let mut content = String::new();
+    if context.properties.is_empty() {
+        content.push_str(" No Properties\n");
+    } else {
+        // print the context contents
+        content.push_str(" Properties :\n");
+    }
     // properties
     for property in &context.properties {
         content.push_str(&format!(" | {}\n", property));
     }
-    // functions
-    content.push_str("\n Functions :\n");
-    for function in &context.functions {
-        content.push_str(&format!(" | {}\n", function));
+    if !context.functions.is_empty() {
+        // functions
+        content.push_str("\n Functions :\n");
+        for function in &context.functions {
+            content.push_str(&format!(" | {}\n", function));
+        }
     }
-    // k properties
-    content.push_str("\n K Properties :\n");
-    for k_property in &context.k_properties {
-        content.push_str(&format!(" | {}\n", k_property));
+    if !context.k_properties.is_empty() {
+        // k properties
+        content.push_str("\n K Properties :\n");
+        for k_property in &context.k_properties {
+            content.push_str(&format!(" | {}\n", k_property));
+        }
     }
     // break status
     content.push_str(&format!(
