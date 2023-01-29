@@ -2,12 +2,15 @@
 
 use std::fs;
 
-pub fn read_and_preprocess_file(filename: &str, imports: Option<Vec<&str>>) -> String {
-    let mut content = fs::read_to_string(filename).unwrap();
+pub fn read_and_preprocess_file(filename: &str, imports: Option<Vec<&str>>) -> Option<String> {
+    let mut content = match fs::read_to_string(filename) {
+        Ok(s) => s,
+        _ => return None,
+    };
     // remove comments
     content = remove_comments(&content);
     // run macros
-    process_macros(&content, imports)
+    Some(process_macros(&content, imports))
 }
 
 pub fn remove_comments(src: &str) -> String {
@@ -153,13 +156,16 @@ fn expand_macro(macro_str: &str, imports: Option<Vec<&str>>) -> String {
                     "Import cycle detected for {filename} : {:?}", imports.unwrap()
                 )
             }
-            content.push_str(&read_and_preprocess_file(filename, match imports.clone() {
+            match read_and_preprocess_file(filename, match imports.clone() {
                 Some(mut imports) => {
                     imports.push(&filename);
                     Some(imports)
                 },
                 None => Some(vec![&filename]),
-            }));
+            }) {
+                Some(s) => content.push_str(&s),
+                None => continue,
+            }
             // to separate file contents (which might not even end with a new-line char)
             content.push('\n');
         }

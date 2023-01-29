@@ -7,9 +7,11 @@ use crate::{
         AlgebraicFunction,
         AlgebraicProperty,
         KProperty,
-        split_algebraic_objects, Atom
+        split_algebraic_objects,
+        Atom,
     },
-    solution::solve_equality, explorer::{init_graph, explore_graph, print_graph_dot_format, atom2atom_expr}, preprocessor::read_and_preprocess_file
+    solution::solve_equality,
+    explorer::{init_graph, explore_graph, print_graph_dot_format, atom2atom_expr}, preprocessor::read_and_preprocess_file
 };
 use reedline_repl_rs::{
     Repl,
@@ -17,7 +19,8 @@ use reedline_repl_rs::{
     clap::{
         Command,
         ArgMatches,
-        Arg, Values
+        Arg,
+        parser::ValuesRef,
     }
 };
 
@@ -46,39 +49,39 @@ pub fn repl(context: ReplContext) {
         .with_banner("REPL for the Algebraic Proof System Language")
         .with_command(
             Command::new("prove")
-                .arg(Arg::with_name("property")
+                .arg(Arg::new("property")
                     .required(true)
-                    .min_values(1)
+                    .num_args(1..)
                 )
                 .about("Prove a property using the current context"),
             prove_callback
         )
         .with_command(
             Command::new("import")
-            .arg(Arg::with_name("files")
+            .arg(Arg::new("files")
                 .required(true)
-                .min_values(1)
+                .num_args(1..)
             )
             .about("Import rules from a list of files"),
             import_callback
         )
         .with_command(
             Command::new("graph")
-            .arg(Arg::with_name("num explorations")
+            .arg(Arg::new("num explorations")
                 .required(true)
             )
-            .arg(Arg::with_name("expression")
+            .arg(Arg::new("expression")
                 .required(true)
-                .min_values(1)
+                .num_args(1..)
             )
             .about("Explore a graph a number of times and print it in dot format"),
             graph_callback
         )
         .with_command(
             Command::new("def")
-            .arg(Arg::with_name("body")
+            .arg(Arg::new("body")
                 .required(true)
-                .min_values(1)
+                .num_args(1..)
                 .allow_hyphen_values(true)
             )
             .about("Add a definition to the current context"),
@@ -86,11 +89,11 @@ pub fn repl(context: ReplContext) {
         )
         .with_command(
             Command::new("ctx")
-            .arg(Arg::with_name("break-status")
+            .arg(Arg::new("break-status")
                 .required(false)
-                .takes_value(false)
+                .num_args(0..)
             )
-            .about("Print the current context"),
+            .about("Print the current context, or set the break-status (auto/no-break)"),
             ctx_callback
         );
     repl.run().unwrap();
@@ -98,13 +101,14 @@ pub fn repl(context: ReplContext) {
 
 fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     // look for sub-command
-    let break_status_id: &'static str = "break-status";
-    let break_status_change = args.is_present(break_status_id);
+    let break_status_id: String = "break-status".to_string();
+    let break_status_change = args.contains_id(&break_status_id);
     if break_status_change {
-        let auto_break = match args.value_of(break_status_id).unwrap() {
+        let break_status = args.get_one::<String>(&break_status_id).unwrap();
+        let auto_break = match break_status.as_str() {
             "auto-break" => true,
             "no-break" => false,
-            s => return Ok(Some(format!(" Break-status '{}' is not valid", s)))
+            s => return Ok(Some(format!(" Break-status '{}' is not valid ('auto-break' or 'no-break')", s))),
         };
         if auto_break {
             // activating auto-break
@@ -139,7 +143,7 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
 }
 
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    let body_str = concat_args(args.values_of("body").unwrap());
+    let body_str = concat_args(args.get_many("body").unwrap());
     let (
         mut properties,
         mut functions,
@@ -160,11 +164,11 @@ fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<S
 
 fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     // concat args of expression
-    let expression_str = concat_args(args.values_of("expression").unwrap());
+    let expression_str = concat_args(args.get_many("expression").unwrap());
     let expression = str2atom_expr(&expression_str);
     let mut graph = init_graph(expression);
     // number of explorations
-    let depth = args.value_of("num explorations").unwrap().parse::<u8>()?;
+    let depth = args.get_one::<& str>("num explorations").unwrap().parse::<u8>()?;
     for _ in 0..depth {
         if ! explore_graph(&mut graph, &context.properties, &context.functions) {
             break;
@@ -176,16 +180,19 @@ fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
 fn import_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     // import all the files
     let mut report = "".to_owned();
-    for filename in args.values_of("files").unwrap() {
-        import_into_context(context, filename);
-        report.push_str(&format!(" imported '{}'\n", filename));
+    for filename in args.get_many::<String>("files").unwrap() {
+        if import_into_context(context, filename) {
+            report.push_str(&format!(" imported '{}'\n", filename));
+        } else {
+            report.push_str(&format!(" failed to import '{}'\n", filename));
+        }
     }
     Ok(Some(report))
 }
 
 fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     // concat args
-    let mut property_str = concat_args(args.values_of("property").unwrap());
+    let mut property_str = concat_args(args.get_many("property").unwrap());
     // add ';;' suffix, if needed
     if ! property_str.ends_with(";; ") {
         property_str.push_str(";;");
@@ -230,9 +237,12 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
     Ok(Some(solution_str))
 }
 
-pub fn import_into_context(context: &mut ReplContext, filename: &str) {
+pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
     // read file
-    let content = read_and_preprocess_file(filename, None);
+    let content = match read_and_preprocess_file(filename, None) {
+        Some(s) => s,
+        None => return false,
+    };
     let content_box = Box::new(content);
     // parse input context
     let alg_objects = match parser::root::<parser::ApsParserKind>(
@@ -270,9 +280,10 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) {
     context.properties.append(&mut properties);
     context.functions.append(&mut functions);
     context.k_properties.append(&mut k_properties);
+    true
 }
 
-fn concat_args(args: Values) -> String {
+fn concat_args(args: ValuesRef<String>) -> String {
     // concat args
     let mut property_str = String::new();
     for value in args {

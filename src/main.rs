@@ -24,7 +24,9 @@ fn main() {
     // import files if needed
     for filename in args.iter().skip(1) {
         // add rules to context
-        import_into_context(&mut context, filename);
+        if !import_into_context(&mut context, filename) {
+            println!(" failed to import '{}'", filename);
+        }
     }
     // start a repl
     repl::repl(context);
