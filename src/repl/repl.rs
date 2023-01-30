@@ -262,7 +262,11 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
             if expr_length > max_expr_length {
                 max_expr_length = expr_length;
             }
-            (expr_str, String::from(if *common {" /!\\\t"} else {"\t"}), rule_str.clone())
+            (
+                expr_str,
+                String::from(if *common { " /!\\\t" } else { "\t" }),
+                rule_str.clone(),
+            )
         })
         .collect::<Vec<_>>();
     // max number of tabs

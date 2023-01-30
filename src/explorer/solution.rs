@@ -1,15 +1,17 @@
 //
 
+use std::thread::JoinHandle;
 use std::{
     sync::{Arc, Mutex},
     thread,
 };
 
 use crate::{
-    explorer::{explore_graph, init_graph, strip_expr_node_naked, ExprGraph, ExprNode},
+    explorer::{explore_graph, init_graph, strip_expr_naked, ExprGraph, ExprNode},
     parser::{AlgebraicFunction, AlgebraicProperty, AtomExpr, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
+use crate::explorer::dress_up_expr;
 
 pub fn solve_equality(
     properties: Vec<AlgebraicProperty>,
@@ -19,31 +21,22 @@ pub fn solve_equality(
     right_expression: &AtomExpr,
     auto_break: bool,
 ) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>, bool)>> {
+    // dress both expressions
     // left graph
-    let left = init_graph(left_expression.clone());
+    let left = init_graph(dress_up_expr(left_expression));
     let left_mutex = Arc::new(Mutex::new(left));
     // right graph
-    let right = init_graph(right_expression.clone());
+    let right = init_graph(dress_up_expr(right_expression));
     let right_mutex = Arc::new(Mutex::new(right));
     // number of explorations
-    let mut depth: u8 = 0;
+    let mut depth: usize = 0;
     loop {
-        let lnodes = {
-            let left_mutex_clone = Arc::clone(&left_mutex);
-            let left_clone = (*left_mutex_clone.lock().unwrap()).clone();
-            left_clone.nodes
-        };
-        let rnodes = {
-            let right_mutex_clone = Arc::clone(&right_mutex);
-            let right_clone = (*right_mutex_clone.lock().unwrap()).clone();
-            right_clone.nodes
-        };
+        let lnodes: Vec<(ExprNode, AtomExpr)> = gather_nodes_from_graph(&left_mutex, depth as u8);
+        let rnodes: Vec<(ExprNode, AtomExpr)> = gather_nodes_from_graph(&right_mutex, depth as u8);
         // look for a common element
-        for lnode in &lnodes {
-            let naked_lnode = strip_expr_node_naked(&lnode.atom_expr);
-            for rnode in &rnodes {
-                let naked_rnode = strip_expr_node_naked(&rnode.atom_expr);
-                if naked_rnode == naked_lnode {
+        for (lnode, naked_lexpr) in lnodes {
+            for (rnode, naked_rexpr) in rnodes.clone() {
+                if naked_lexpr == naked_rexpr {
                     return Some(find_route(
                         &left_mutex.lock().unwrap(),
                         &right_mutex.lock().unwrap(),
@@ -54,38 +47,12 @@ pub fn solve_equality(
             }
         }
         // explore the graphs once each
-        let left_handle = {
-            // clone things
-            let scoped_left_mutex_clone = Arc::clone(&left_mutex);
-            let properties_clone = properties.clone();
-            let functions_clone = functions.clone();
-            // return thread
-            thread::spawn(move || {
-                explore_graph(
-                    &mut *scoped_left_mutex_clone.lock().unwrap(),
-                    &properties_clone,
-                    &functions_clone,
-                )
-            })
-        };
-        let right_handle = {
-            // clone things
-            let scoped_right_mutex_clone = Arc::clone(&right_mutex);
-            let properties_clone = properties.clone();
-            let functions_clone = functions.clone();
-            // return thread
-            thread::spawn(move || {
-                explore_graph(
-                    &mut *scoped_right_mutex_clone.lock().unwrap(),
-                    &properties_clone,
-                    &functions_clone,
-                )
-            })
-        };
+        let left_handle = start_graph_exploration(&properties, &functions, &left_mutex);
+        let right_handle = start_graph_exploration(&properties, &functions, &right_mutex);
         let left_has_evolved = left_handle.join().unwrap();
         let right_has_evolved = right_handle.join().unwrap();
 
-        if !(left_has_evolved || right_has_evolved) {
+        if !left_has_evolved && !right_has_evolved {
             // one graph can evolve alone, and maybe 'join' the other
             // so we have to wait for both graphs to be 'exhausted'
             break;
@@ -94,16 +61,8 @@ pub fn solve_equality(
         depth += 1;
         // manual calculation limits (see 'settings' command)
         if auto_break {
-            let num_left_nodes = {
-                let left_mutex_clone = Arc::clone(&left_mutex);
-                let left_clone = (*left_mutex_clone.lock().unwrap()).clone();
-                left_clone.nodes.len()
-            };
-            let num_right_nodes = {
-                let right_mutex_clone = Arc::clone(&right_mutex);
-                let right_clone = (*right_mutex_clone.lock().unwrap()).clone();
-                right_clone.nodes.len()
-            };
+            let num_left_nodes = num_nodes_left_in_graph(&left_mutex);
+            let num_right_nodes = num_nodes_left_in_graph(&right_mutex);
             if depth > MAX_GRAPH_EXPLORATION_DEPTH
                 || num_left_nodes > MAX_NODES_PER_GRAPH
                 || num_right_nodes > MAX_NODES_PER_GRAPH
@@ -118,6 +77,45 @@ pub fn solve_equality(
     }
     // no solution found
     None
+}
+
+fn num_nodes_left_in_graph(left_mutex: &Arc<Mutex<ExprGraph>>) -> usize {
+    let left_mutex_clone = Arc::clone(&left_mutex);
+    let left_clone = (*left_mutex_clone.lock().unwrap()).clone();
+    left_clone.nodes.len()
+}
+
+fn gather_nodes_from_graph(
+    left_mutex: &Arc<Mutex<ExprGraph>>,
+    _depth: u8,
+) -> Vec<(ExprNode, AtomExpr)> {
+    let mutex_clone = Arc::clone(&left_mutex);
+    let clone = (*mutex_clone.lock().unwrap()).clone();
+    clone
+        .nodes
+        .into_iter()
+        // .filter(|node| node.depth == depth || node.depth + 1 == depth)
+        .map(|node| (node.clone(), strip_expr_naked(&node.atom_expr)))
+        .collect()
+}
+
+fn start_graph_exploration(
+    properties: &Vec<AlgebraicProperty>,
+    functions: &Vec<AlgebraicFunction>,
+    left_mutex: &Arc<Mutex<ExprGraph>>,
+) -> JoinHandle<bool> {
+    // clone things
+    let scoped_left_mutex_clone = Arc::clone(&left_mutex);
+    let properties_clone = properties.clone();
+    let functions_clone = functions.clone();
+    // return thread
+    thread::spawn(move || {
+        explore_graph(
+            &mut *scoped_left_mutex_clone.lock().unwrap(),
+            &properties_clone,
+            &functions_clone,
+        )
+    })
 }
 
 /// A solution has been found (common element in the two graphs)
@@ -166,9 +164,9 @@ fn find_route(
     // println!("route:\n{:#?}\n\nrroute:\n{:#?}\n", route, rroute);
     assert_eq!(
         match rroute.remove(0) {
-            (x, _, _) => strip_expr_node_naked(&x),
+            (x, _, _) => strip_expr_naked(&x),
         },
-        strip_expr_node_naked(&lcommon.atom_expr).clone()
+        strip_expr_naked(&lcommon.atom_expr).clone()
     );
     route.append(&mut rroute);
     // return the route

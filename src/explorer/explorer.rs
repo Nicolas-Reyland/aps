@@ -34,11 +34,11 @@ type ExprNodeIndex = usize;
 pub struct ExprNode {
     // TODO: make atom_expr a parser::Atom, since
     // one should be able to ask for a prove such as "A * B = 0"
-    pub atom_expr: parser::AtomExpr,
+    pub atom_expr: AtomExpr,
     pub transform: Option<AlgebraicProperty>,
     pub parent: ExprNodeIndex,
     pub index: ExprNodeIndex,
-    depth: u8,
+    pub depth: u8,
 }
 
 impl PartialEq for ExprNode {
@@ -107,11 +107,16 @@ pub fn explore_graph(
         .iter()
         .filter(|node| node.depth == graph.max_depth)
     {
-        for (p_index, property) in properties.iter().enumerate() {
+        // Skip the rounds that would simply 'go back' one iteration.
+        // For example, let 1@"X + Y" -> 2@"Y + Z" be two connected nodes
+        // The transformation from 1 to 2 is "A + B = B + A". We don't want
+        // to run this transformation again on 2 ("Y + X"),
+        // since it will only give 1 back ("X + Y"), where we came from.
+        'properties: for (p_index, property) in properties.iter().enumerate() {
             match &node.transform {
                 Some(node_transform) => {
                     if node_transform == property {
-                        continue;
+                        continue 'properties;
                     }
                 }
                 None => (),
@@ -414,7 +419,7 @@ fn generate_new_expression(
         // normal mapping
         atoms.push(match atom_v {
             Atom::Parenthesized(par_v) => {
-                parser::parenthesized_atom(generate_new_expression(par_v, mappings, functions))
+                parenthesized_atom(generate_new_expression(par_v, mappings, functions))
             }
             Atom::Special(_) => atom_v.clone(),
             Atom::FunctionCall((fn_name, _)) => {
@@ -489,7 +494,7 @@ fn generate_new_expression(
     AtomExpr { atoms, operator }
 }
 
-/// Strips the node naked.
+/// Strips the expression naked.
 /// Removes parentheses for easier and faster comparison.
 ///
 /// Here is an example of what is meant :
@@ -499,29 +504,89 @@ fn generate_new_expression(
 /// All operators are considered to be left-associative.
 ///
 /// Here is another example: "A + (B + C)" => "A + (B + C)"
-/// We cannot remove the parentheses, since '+' is not right-associative
+/// We cannot remove parentheses, since '+' is not right-associative
 /// (again, this should be customizable later on).
-pub fn strip_expr_node_naked(expr: &AtomExpr) -> AtomExpr {
+pub fn strip_expr_naked(expr: &AtomExpr) -> AtomExpr {
     // left-associative operator case (default)
-    match expr.atoms.first() {
-        Some(Atom::Parenthesized(sub_expr)) => {
-            // only merge if the operators are the same
-            if expr.operator == sub_expr.operator {
+    let operator = expr.operator.clone();
+    // "((A + B) + C) + D" => "(A + B) + C + D" => "A + B + C + D"
+
+    // swap 'split_first' with 'split_last' for right-associative operators (further checks needed tho)
+    match expr.atoms.split_first() {
+        Some((isolated, rest)) => match isolated {
+            Atom::Parenthesized(sub_expr) if expr.operator == sub_expr.operator => {
                 // strip this sub-expression naked
-                let naked_sub_expr = strip_expr_node_naked(&sub_expr);
+                let naked_sub_expr = strip_expr_naked(&sub_expr);
                 // merge the sub-expression into the current one
                 let mut before_atoms = naked_sub_expr.atoms.clone();
-                let after_atoms = expr.atoms[1..].to_vec();
-                before_atoms.extend(after_atoms);
+                before_atoms.extend(rest.to_vec());
                 AtomExpr {
                     atoms: before_atoms,
-                    operator: expr.operator.clone(),
+                    operator,
                 }
+            }
+            _ => AtomExpr {
+                atoms: {
+                    expr.atoms
+                        .iter()
+                        .enumerate()
+                        .map(|(index, atom)| match (index, atom) {
+                            (index, Atom::Parenthesized(sub_expr)) if index != 0 => {
+                                Atom::Parenthesized(strip_expr_naked(&sub_expr))
+                            }
+                            _ => (*atom).clone(),
+                        })
+                        .collect()
+                },
+                operator,
+            },
+        },
+        // wtf ??
+        None => (*expr).clone(),
+    }
+}
+
+/// Dresses the expression up.
+/// Adds parentheses for easier and faster property matching.
+///
+/// Here is an example of what is meant :
+/// "A + B + C + D" => "((A + B) + C) + D"
+/// Of course, this only works for left-associative operators.
+/// The associativity of operators cannot be specified in the grammar as of yet.
+/// All operators are considered to be left-associative.
+/// (again, this should be customizable later on).
+pub fn dress_up_expr(expr: &AtomExpr) -> AtomExpr {
+    // left-associative operator case (default)
+    let operator = expr.operator.clone();
+    // "A + B + C + D" => "(A + B + C) + D" => "((A + B) + C) + D"
+
+    // swap 'split_last' with 'split_first' for right-associative operators (further checks needed tho)
+    match expr.atoms.split_last() {
+        Some((isolated, rest)) => {
+            let dressed_up_isolated = match isolated {
+                Atom::Parenthesized(sub_expr) => Atom::Parenthesized(dress_up_expr(sub_expr)),
+                atom => (*atom).clone(),
+            };
+            let num_left = rest.len();
+            if num_left == 0 {
+                return atom2atom_expr(dressed_up_isolated);
+            }
+            let dressed_up_rest = if num_left == 1 {
+                rest[0].clone()
             } else {
-                (*expr).clone()
+                Atom::Parenthesized(dress_up_expr(&AtomExpr {
+                    atoms: rest.to_vec(),
+                    operator: operator.clone(),
+                }))
+            };
+            AtomExpr {
+                // swap this vector when handling right-associative
+                atoms: vec![dressed_up_rest, dressed_up_isolated],
+                operator: operator.clone(),
             }
         }
-        _ => (*expr).clone(),
+        // wtf ??
+        None => return (*expr).clone(),
     }
 }
 
@@ -530,6 +595,54 @@ pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
         atoms: vec![atom],
         operator: None,
     }
+}
+
+#[test]
+fn test_expr_stripping() {
+    let expr_a = match parser::atom_expr_p::<parser::ApsParserKind>("((A + B) + C) + D") {
+        Ok(("", expr)) => expr,
+        Ok((rest, parsed)) => panic!(
+            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
+            rest, parsed,
+        ),
+        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
+    };
+    let expr_b = match parser::atom_expr_p::<parser::ApsParserKind>("X + ((A * B) * C) + D") {
+        Ok(("", expr)) => expr,
+        Ok((rest, parsed)) => panic!(
+            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
+            rest, parsed,
+        ),
+        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
+    };
+    println!("expr_a = {}", expr_a);
+    println!("strip(expr_a) = {}", strip_expr_naked(&expr_a));
+    println!("expr_b = {}", expr_b);
+    println!("strip(expr_b) = {}", strip_expr_naked(&expr_b));
+}
+
+#[test]
+fn test_expr_dressing_up() {
+    let expr_a = match parser::atom_expr_p::<parser::ApsParserKind>("A + B + C + D") {
+        Ok(("", expr)) => expr,
+        Ok((rest, parsed)) => panic!(
+            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
+            rest, parsed,
+        ),
+        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
+    };
+    let expr_b = match parser::atom_expr_p::<parser::ApsParserKind>("X + (A * B * C) + D") {
+        Ok(("", expr)) => expr,
+        Ok((rest, parsed)) => panic!(
+            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
+            rest, parsed,
+        ),
+        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
+    };
+    println!("expr_a = {}", expr_a);
+    println!("dress_up(expr_a) = {}", dress_up_expr(&expr_a));
+    println!("expr_b = {}", expr_b);
+    println!("dress_up(expr_b) = {}", dress_up_expr(&expr_b));
 }
 
 #[test]

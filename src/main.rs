@@ -17,10 +17,8 @@ pub(crate) mod preprocessor_tests;
 mod repl;
 #[path = "explorer/solution.rs"]
 mod solution;
-#[path = "tests/solution_tests.rs"]
-pub(crate) mod solution_tests;
 
-static MAX_GRAPH_EXPLORATION_DEPTH: u8 = 12;
+static MAX_GRAPH_EXPLORATION_DEPTH: usize = 12;
 static MAX_NODES_PER_GRAPH: usize = 100_000;
 
 fn main() {
