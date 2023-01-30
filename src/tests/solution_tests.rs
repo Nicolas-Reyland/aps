@@ -1,8 +1,11 @@
 #[cfg(test)]
-
 use super::*;
 #[allow(unused_imports)]
-use crate::{solution::solve_equality, repl::str2atom_expr, parser::{AtomExpr, Operator, Atom, AlgebraicProperty}};
+use crate::{
+    parser::{AlgebraicProperty, Atom, AtomExpr, Operator},
+    repl::str2atom_expr,
+    solution::solve_equality,
+};
 
 #[test]
 fn test_x_y_z_solution() {
@@ -19,410 +22,142 @@ fn test_x_y_z_solution() {
             &right,
             context.auto_break,
         ),
-        Some(
-            vec![
-                (
-                    AtomExpr {
-                        atoms: vec![
-                            Atom::Value(
-                                'X',
-                            ),
-                            Atom::Value(
-                                'Y',
-                            ),
-                            Atom::Value(
-                                'Z',
-                            ),
-                        ],
-                        operators: vec![
-                            Operator {
-                                op: '+',
-                            },
-                            Operator {
-                                op: '+',
-                            },
-                        ],
+        Some(vec![
+            (
+                AtomExpr {
+                    atoms: vec![Atom::Value('X',), Atom::Value('Y',), Atom::Value('Z',),],
+                    operators: vec![Operator { op: '+' }, Operator { op: '+' },],
+                },
+                None,
+            ),
+            (
+                AtomExpr {
+                    atoms: vec![
+                        Atom::Parenthesized(AtomExpr {
+                            atoms: vec![Atom::Value('X',), Atom::Value('Y',),],
+                            operators: vec![Operator { op: '+' },],
+                        },),
+                        Atom::Value('Z',),
+                    ],
+                    operators: vec![Operator { op: '+' },],
+                },
+                Some(AlgebraicProperty {
+                    atom_expr_left: AtomExpr {
+                        atoms: vec![Atom::Value('A',), Atom::Value('B',), Atom::Extension,],
+                        operators: vec![Operator { op: '+' }, Operator { op: '+' },],
                     },
-                    None,
-                ),
-                (
-                    AtomExpr {
+                    atom_expr_right: AtomExpr {
                         atoms: vec![
-                            Atom::Parenthesized(
-                                AtomExpr {
-                                    atoms: vec![
-                                        Atom::Value(
-                                            'X',
-                                        ),
-                                        Atom::Value(
-                                            'Y',
-                                        ),
-                                    ],
-                                    operators: vec![
-                                        Operator {
-                                            op: '+',
-                                        },
-                                    ],
-                                },
-                            ),
-                            Atom::Value(
-                                'Z',
-                            ),
+                            Atom::Parenthesized(AtomExpr {
+                                atoms: vec![Atom::Value('A',), Atom::Value('B',),],
+                                operators: vec![Operator { op: '+' },],
+                            },),
+                            Atom::Extension,
                         ],
-                        operators: vec![
-                            Operator {
-                                op: '+',
-                            },
-                        ],
+                        operators: vec![Operator { op: '+' },],
                     },
-                    Some(
-                        AlgebraicProperty {
-                            atom_expr_left: AtomExpr {
-                                atoms: vec![
-                                    Atom::Value(
-                                        'A',
-                                    ),
-                                    Atom::Value(
-                                        'B',
-                                    ),
-                                    Atom::Extension,
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                            atom_expr_right: AtomExpr {
-                                atoms: vec![
-                                    Atom::Parenthesized(
-                                        AtomExpr {
-                                            atoms: vec![
-                                                Atom::Value(
-                                                    'A',
-                                                ),
-                                                Atom::Value(
-                                                    'B',
-                                                ),
-                                            ],
-                                            operators: vec![
-                                                Operator {
-                                                    op: '+',
-                                                },
-                                            ],
-                                        },
-                                    ),
-                                    Atom::Extension,
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                        },
-                    ),
-                ),
-                (
-                    AtomExpr {
+                },),
+            ),
+            (
+                AtomExpr {
+                    atoms: vec![
+                        Atom::Value('Z',),
+                        Atom::Parenthesized(AtomExpr {
+                            atoms: vec![Atom::Value('X',), Atom::Value('Y',),],
+                            operators: vec![Operator { op: '+' },],
+                        },),
+                    ],
+                    operators: vec![Operator { op: '+' },],
+                },
+                Some(AlgebraicProperty {
+                    atom_expr_left: AtomExpr {
+                        atoms: vec![Atom::Value('A',), Atom::Value('B',),],
+                        operators: vec![Operator { op: '+' },],
+                    },
+                    atom_expr_right: AtomExpr {
+                        atoms: vec![Atom::Value('B',), Atom::Value('A',),],
+                        operators: vec![Operator { op: '+' },],
+                    },
+                },),
+            ),
+            (
+                AtomExpr {
+                    atoms: vec![
+                        Atom::Value('Z',),
+                        Atom::Parenthesized(AtomExpr {
+                            atoms: vec![Atom::Value('Y',), Atom::Value('X',),],
+                            operators: vec![Operator { op: '+' },],
+                        },),
+                    ],
+                    operators: vec![Operator { op: '+' },],
+                },
+                Some(AlgebraicProperty {
+                    atom_expr_left: AtomExpr {
+                        atoms: vec![Atom::Value('A',), Atom::Value('B',),],
+                        operators: vec![Operator { op: '+' },],
+                    },
+                    atom_expr_right: AtomExpr {
+                        atoms: vec![Atom::Value('B',), Atom::Value('A',),],
+                        operators: vec![Operator { op: '+' },],
+                    },
+                },),
+            ),
+            (
+                AtomExpr {
+                    atoms: vec![
+                        Atom::Parenthesized(AtomExpr {
+                            atoms: vec![Atom::Value('Z',), Atom::Value('Y',),],
+                            operators: vec![Operator { op: '+' },],
+                        },),
+                        Atom::Value('X',),
+                    ],
+                    operators: vec![Operator { op: '+' },],
+                },
+                Some(AlgebraicProperty {
+                    atom_expr_left: AtomExpr {
                         atoms: vec![
-                            Atom::Value(
-                                'Z',
-                            ),
-                            Atom::Parenthesized(
-                                AtomExpr {
-                                    atoms: vec![
-                                        Atom::Value(
-                                            'X',
-                                        ),
-                                        Atom::Value(
-                                            'Y',
-                                        ),
-                                    ],
-                                    operators: vec![
-                                        Operator {
-                                            op: '+',
-                                        },
-                                    ],
-                                },
-                            ),
+                            Atom::Parenthesized(AtomExpr {
+                                atoms: vec![Atom::Value('A',), Atom::Value('B',),],
+                                operators: vec![Operator { op: '+' },],
+                            },),
+                            Atom::Value('C',),
                         ],
-                        operators: vec![
-                            Operator {
-                                op: '+',
-                            },
-                        ],
+                        operators: vec![Operator { op: '+' },],
                     },
-                    Some(
-                        AlgebraicProperty {
-                            atom_expr_left: AtomExpr {
-                                atoms: vec![
-                                    Atom::Value(
-                                        'A',
-                                    ),
-                                    Atom::Value(
-                                        'B',
-                                    ),
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                            atom_expr_right: AtomExpr {
-                                atoms: vec![
-                                    Atom::Value(
-                                        'B',
-                                    ),
-                                    Atom::Value(
-                                        'A',
-                                    ),
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                        },
-                    ),
-                ),
-                (
-                    AtomExpr {
+                    atom_expr_right: AtomExpr {
                         atoms: vec![
-                            Atom::Value(
-                                'Z',
-                            ),
-                            Atom::Parenthesized(
-                                AtomExpr {
-                                    atoms: vec![
-                                        Atom::Value(
-                                            'Y',
-                                        ),
-                                        Atom::Value(
-                                            'X',
-                                        ),
-                                    ],
-                                    operators: vec![
-                                        Operator {
-                                            op: '+',
-                                        },
-                                    ],
-                                },
-                            ),
+                            Atom::Value('A',),
+                            Atom::Parenthesized(AtomExpr {
+                                atoms: vec![Atom::Value('B',), Atom::Value('C',),],
+                                operators: vec![Operator { op: '+' },],
+                            },),
                         ],
-                        operators: vec![
-                            Operator {
-                                op: '+',
-                            },
-                        ],
+                        operators: vec![Operator { op: '+' },],
                     },
-                    Some(
-                        AlgebraicProperty {
-                            atom_expr_left: AtomExpr {
-                                atoms: vec![
-                                    Atom::Value(
-                                        'A',
-                                    ),
-                                    Atom::Value(
-                                        'B',
-                                    ),
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                            atom_expr_right: AtomExpr {
-                                atoms: vec![
-                                    Atom::Value(
-                                        'B',
-                                    ),
-                                    Atom::Value(
-                                        'A',
-                                    ),
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                        },
-                    ),
-                ),
-                (
-                    AtomExpr {
+                },),
+            ),
+            (
+                AtomExpr {
+                    atoms: vec![Atom::Value('Z',), Atom::Value('Y',), Atom::Value('X',),],
+                    operators: vec![Operator { op: '+' }, Operator { op: '+' },],
+                },
+                Some(AlgebraicProperty {
+                    atom_expr_left: AtomExpr {
+                        atoms: vec![Atom::Value('A',), Atom::Value('B',), Atom::Extension,],
+                        operators: vec![Operator { op: '+' }, Operator { op: '+' },],
+                    },
+                    atom_expr_right: AtomExpr {
                         atoms: vec![
-                            Atom::Parenthesized(
-                                AtomExpr {
-                                    atoms: vec![
-                                        Atom::Value(
-                                            'Z',
-                                        ),
-                                        Atom::Value(
-                                            'Y',
-                                        ),
-                                    ],
-                                    operators: vec![
-                                        Operator {
-                                            op: '+',
-                                        },
-                                    ],
-                                },
-                            ),
-                            Atom::Value(
-                                'X',
-                            ),
+                            Atom::Parenthesized(AtomExpr {
+                                atoms: vec![Atom::Value('A',), Atom::Value('B',),],
+                                operators: vec![Operator { op: '+' },],
+                            },),
+                            Atom::Extension,
                         ],
-                        operators: vec![
-                            Operator {
-                                op: '+',
-                            },
-                        ],
+                        operators: vec![Operator { op: '+' },],
                     },
-                    Some(
-                        AlgebraicProperty {
-                            atom_expr_left: AtomExpr {
-                                atoms: vec![
-                                    Atom::Parenthesized(
-                                        AtomExpr {
-                                            atoms: vec![
-                                                Atom::Value(
-                                                    'A',
-                                                ),
-                                                Atom::Value(
-                                                    'B',
-                                                ),
-                                            ],
-                                            operators: vec![
-                                                Operator {
-                                                    op: '+',
-                                                },
-                                            ],
-                                        },
-                                    ),
-                                    Atom::Value(
-                                        'C',
-                                    ),
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                            atom_expr_right: AtomExpr {
-                                atoms: vec![
-                                    Atom::Value(
-                                        'A',
-                                    ),
-                                    Atom::Parenthesized(
-                                        AtomExpr {
-                                            atoms: vec![
-                                                Atom::Value(
-                                                    'B',
-                                                ),
-                                                Atom::Value(
-                                                    'C',
-                                                ),
-                                            ],
-                                            operators: vec![
-                                                Operator {
-                                                    op: '+',
-                                                },
-                                            ],
-                                        },
-                                    ),
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                        },
-                    ),
-                ),
-                (
-                    AtomExpr {
-                        atoms: vec![
-                            Atom::Value(
-                                'Z',
-                            ),
-                            Atom::Value(
-                                'Y',
-                            ),
-                            Atom::Value(
-                                'X',
-                            ),
-                        ],
-                        operators: vec![
-                            Operator {
-                                op: '+',
-                            },
-                            Operator {
-                                op: '+',
-                            },
-                        ],
-                    },
-                    Some(
-                        AlgebraicProperty {
-                            atom_expr_left: AtomExpr {
-                                atoms: vec![
-                                    Atom::Value(
-                                        'A',
-                                    ),
-                                    Atom::Value(
-                                        'B',
-                                    ),
-                                    Atom::Extension,
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                            atom_expr_right: AtomExpr {
-                                atoms: vec![
-                                    Atom::Parenthesized(
-                                        AtomExpr {
-                                            atoms: vec![
-                                                Atom::Value(
-                                                    'A',
-                                                ),
-                                                Atom::Value(
-                                                    'B',
-                                                ),
-                                            ],
-                                            operators: vec![
-                                                Operator {
-                                                    op: '+',
-                                                },
-                                            ],
-                                        },
-                                    ),
-                                    Atom::Extension,
-                                ],
-                                operators: vec![
-                                    Operator {
-                                        op: '+',
-                                    },
-                                ],
-                            },
-                        },
-                    ),
-                ),
-            ],
-        )
+                },),
+            ),
+        ],)
     );
 }

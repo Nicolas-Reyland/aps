@@ -8,5 +8,6 @@ Todo List :
 - memoization
 - grouping: "A + B + C" = "(A + B) + C"
 - write new parsing tests
+- only iterate over  graph "outer layer"
 
 Urgent Fix List :

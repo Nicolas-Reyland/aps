@@ -1,22 +1,14 @@
-// 
+//
 
-use std::{thread, sync::{Mutex, Arc}};
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+};
 
 use crate::{
-    parser::{
-        AtomExpr,
-        AlgebraicProperty,
-        AlgebraicFunction,
-        KProperty
-    },
-    explorer::{
-        init_graph,
-        ExprGraph,
-        ExprNode,
-        explore_graph
-    },
-    MAX_GRAPH_EXPLORATION_DEPTH,
-    MAX_NODES_PER_GRAPH
+    explorer::{explore_graph, init_graph, strip_expr_node_naked, ExprGraph, ExprNode},
+    parser::{AlgebraicFunction, AlgebraicProperty, AtomExpr, KProperty},
+    MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
 
 pub fn solve_equality(
@@ -26,7 +18,7 @@ pub fn solve_equality(
     left_expression: &AtomExpr,
     right_expression: &AtomExpr,
     auto_break: bool,
-) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>)>> {
+) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>, bool)>> {
     // left graph
     let left = init_graph(left_expression.clone());
     let left_mutex = Arc::new(Mutex::new(left));
@@ -48,14 +40,16 @@ pub fn solve_equality(
         };
         // look for a common element
         for lnode in &lnodes {
+            let naked_lnode = strip_expr_node_naked(&lnode.atom_expr);
             for rnode in &rnodes {
-                if rnode == lnode {
+                let naked_rnode = strip_expr_node_naked(&rnode.atom_expr);
+                if naked_rnode == naked_lnode {
                     return Some(find_route(
                         &left_mutex.lock().unwrap(),
                         &right_mutex.lock().unwrap(),
                         &lnode,
                         &rnode,
-                    ))
+                    ));
                 }
             }
         }
@@ -66,9 +60,13 @@ pub fn solve_equality(
             let properties_clone = properties.clone();
             let functions_clone = functions.clone();
             // return thread
-            thread::spawn(
-                move || explore_graph(&mut *scoped_left_mutex_clone.lock().unwrap(), &properties_clone, &functions_clone)
-            )
+            thread::spawn(move || {
+                explore_graph(
+                    &mut *scoped_left_mutex_clone.lock().unwrap(),
+                    &properties_clone,
+                    &functions_clone,
+                )
+            })
         };
         let right_handle = {
             // clone things
@@ -76,18 +74,21 @@ pub fn solve_equality(
             let properties_clone = properties.clone();
             let functions_clone = functions.clone();
             // return thread
-            thread::spawn(
-                move || explore_graph(&mut *scoped_right_mutex_clone.lock().unwrap(), &properties_clone, &functions_clone)
-            )
+            thread::spawn(move || {
+                explore_graph(
+                    &mut *scoped_right_mutex_clone.lock().unwrap(),
+                    &properties_clone,
+                    &functions_clone,
+                )
+            })
         };
         let left_has_evolved = left_handle.join().unwrap();
         let right_has_evolved = right_handle.join().unwrap();
 
-        if !(left_has_evolved || right_has_evolved)
-        {
+        if !(left_has_evolved || right_has_evolved) {
             // one graph can evolve alone, and maybe 'join' the other
             // so we have to wait for both graphs to be 'exhausted'
-            break
+            break;
         }
         // increment the depth
         depth += 1;
@@ -103,18 +104,17 @@ pub fn solve_equality(
                 let right_clone = (*right_mutex_clone.lock().unwrap()).clone();
                 right_clone.nodes.len()
             };
-            if depth > MAX_GRAPH_EXPLORATION_DEPTH ||
-                num_left_nodes > MAX_NODES_PER_GRAPH ||
-                num_right_nodes > MAX_NODES_PER_GRAPH
+            if depth > MAX_GRAPH_EXPLORATION_DEPTH
+                || num_left_nodes > MAX_NODES_PER_GRAPH
+                || num_right_nodes > MAX_NODES_PER_GRAPH
             {
                 eprintln!(
                     "Automatically breaking from graph exploration algorithm. Depth: {}, Left: {}, Right: {}",
                     depth, num_left_nodes, num_right_nodes
                 );
-                break
+                break;
             }
         }
-        
     }
     // no solution found
     None
@@ -131,48 +131,46 @@ fn find_route(
     right: &ExprGraph,
     lcommon: &ExprNode,
     rcommon: &ExprNode,
-) -> Vec<(AtomExpr, Option<AlgebraicProperty>)> {
-    let mut route: Vec<(AtomExpr, Option<AlgebraicProperty>)> = Vec::new();
+) -> Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> {
+    // final route
+    let mut route: Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> = Vec::new();
     // link base-node to common on the left
-    let mut lroute: Vec<(AtomExpr, Option<AlgebraicProperty>)> = Vec::new();
+    let mut lroute: Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> = Vec::new();
     let mut lnode = lcommon;
+    let first_index = lnode.index;
     while lnode.index != 0 {
         lroute.push((
             lnode.atom_expr.clone(),
-            Some(lnode.transform.as_ref().unwrap().clone())
+            Some(lnode.transform.as_ref().unwrap().clone()),
+            lnode.index == first_index,
         ));
         lnode = &left.nodes[lnode.parent];
     }
     // push base node
-    lroute.push((lnode.atom_expr.clone(), None));
+    lroute.push((lnode.atom_expr.clone(), None, false));
     lroute.reverse(); // from common->base to base->common
-    // link base-node to common on the right
-    let mut rroute: Vec<(AtomExpr, Option<AlgebraicProperty>)> = Vec::new();
+                      // link base-node to common on the right
+    let mut rroute: Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> = Vec::new();
     let mut rnode = rcommon;
     let mut next_transform: Option<AlgebraicProperty> = None;
     while rnode.index != 0 {
-        rroute.push((
-            rnode.atom_expr.clone(),
-            next_transform
-        ));
+        rroute.push((rnode.atom_expr.clone(), next_transform, false));
         next_transform = Some(rnode.transform.as_ref().unwrap().clone());
         rnode = &right.nodes[rnode.parent];
     }
     // push the base
-    rroute.push((rnode.atom_expr.clone(), next_transform));
+    rroute.push((rnode.atom_expr.clone(), next_transform, false));
     // add all the left route
-    route.append(
-        &mut lroute
-    );
+    route.append(&mut lroute);
     // remove the common element from the right route (or we'll have it twice)
     // println!("route:\n{:#?}\n\nrroute:\n{:#?}\n", route, rroute);
     assert_eq!(
-        match rroute.remove(0) {(x,_) => x},
-        lcommon.atom_expr.clone()
+        match rroute.remove(0) {
+            (x, _, _) => strip_expr_node_naked(&x),
+        },
+        strip_expr_node_naked(&lcommon.atom_expr).clone()
     );
-    route.append(
-        &mut rroute
-    );
+    route.append(&mut rroute);
     // return the route
     route
 }

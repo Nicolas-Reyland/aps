@@ -1,16 +1,24 @@
 /* Parser for Algebraic Proofing System Language */
 
+use repl::{import_into_context /*, solve_equality_str*/, init_context};
 use std::env;
-use repl::{init_context, import_into_context/*, solve_equality_str*/};
 
-#[path = "parser/parser.rs"] mod parser;
-#[path = "parser/preprocessor.rs"] pub(crate) mod preprocessor;
-#[path = "explorer/explorer.rs"] mod explorer;
-#[path = "explorer/solution.rs"] mod solution;
-#[path = "repl/repl.rs"] mod repl;
-#[path = "tests/parser_tests.rs"] pub(crate) mod parser_tests;
-#[path = "tests/solution_tests.rs"] pub(crate) mod solution_tests;
-#[path = "tests/preprocessor_tests.rs"] pub(crate) mod preprocessor_tests;
+#[path = "explorer/explorer.rs"]
+mod explorer;
+#[path = "parser/parser.rs"]
+mod parser;
+#[path = "tests/parser_tests.rs"]
+pub(crate) mod parser_tests;
+#[path = "parser/preprocessor.rs"]
+pub(crate) mod preprocessor;
+#[path = "tests/preprocessor_tests.rs"]
+pub(crate) mod preprocessor_tests;
+#[path = "repl/repl.rs"]
+mod repl;
+#[path = "explorer/solution.rs"]
+mod solution;
+#[path = "tests/solution_tests.rs"]
+pub(crate) mod solution_tests;
 
 static MAX_GRAPH_EXPLORATION_DEPTH: u8 = 12;
 static MAX_NODES_PER_GRAPH: usize = 100_000;
