@@ -162,10 +162,11 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         "on" => 1,
         "off" => 2,
         "show" => 3,
-        _ =>
+        _ => {
             return Ok(Some(
                 " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
-            )),
+            ))
+        }
     };
     match param_name {
         "auto-break" => {
