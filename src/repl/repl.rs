@@ -140,8 +140,6 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
             content.push_str(&format!(" | {}\n", k_property));
         }
     }
-    // break status
-    content.push_str(&format!("\n Auto break : {}\n", context.auto_break));
     Ok(Some(content))
 }
 
