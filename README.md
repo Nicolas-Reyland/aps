@@ -11,7 +11,7 @@ git clone https://github.com/Nicolas-Reyland/apsl-lang.git
 cd apsl-lang
 ```
 
-Install rust and cargo, then run :
+Install rust and cargo :
 ```sh
 cargo build --release
 ```
@@ -23,9 +23,48 @@ To get a repl shell, run :
 cargo run --release
 ```
 
-You can also import *apsl* files by adding them to the `cargo run` command like so : `cargo run file1.apsl file2.apsl ...` .
+Let's say your goal is to generate algebraic proofs in bizarre Algebraic Structures.
+First of all, you'll need to describe your Structure. In ASPL, you can only work with one structure at a time (yet).
+Let's write an algebraic structure that has a `+` operator and `@` operator.
+```
+// comments are C-like comments
 
-Once inside the repl-shell, you can type `help` to get some more infos about the available commands.
+// operator properties are listed in the 'property-group'. The sign
+// you put in front of the group is not relevant, but adds clarity about
+// which operator is being described.
++ :: {
+    // Rules are written like so : left-expression = right-expression ;
+
+    // Let's make + a commutative operator
+    A + B = B + A ;
+    // Let's add an identity
+    A + 0 = A ;
+    // Since we have the commutative property of +, we also know that 0 + A = A
+}
+
+// Let's add another operator
+@ :: {
+    A @ 1 = A ;
+    A @ A = 0 ;
+}
+
+// We can add properties using both operators (we'll use _ as a prefix,
+// but as said previously, it doesn't matter what we put there)
+_ :: {
+    A @ (B + C) = (A @ B) + (A @ C) ;
+}
+```
+
+All that should be written to a file, for example `unusable.apsl`.
+Such *apsl* files can be imported by adding them to the `cargo run` command like so : `cargo run file1.apsl file2.apsl ...`.
+
+Once inside the repl-shell, you can ask for a proof of **X @ ((Z @ Z) + Y) @ 1 = Y @ X** like so :
+```
+Algebraic Proof System Language 〉prove X @ ((Z @ Z) + Y) = X @ Y
+```
+I'll let you see what it outputs :) (there are examples of outputs in the [examples](#examples) section)
+
+Please type `help` to get some more infos about the available commands.
 
 # Examples
 
@@ -39,7 +78,7 @@ Let's write a file with the following rules/axioms, defining an algebraic struct
 ```
 Let's call that file *plus.apsl*.
 
-Now, let's start a repl (`cargo run plus.apsl`). You can also just run `cargo run`, then use the `import` command as such: `import plus.apsl`.
+Now, let's start a repl (`cargo run plus.apsl`). You can also just run `cargo run`, then use the `import` command as such: `import plus.apsl` (pay attention to the current working directory).
 To check that the rules are well loaded, type `ctx`. This should give you the following output :
 ```
  Properties :
@@ -58,14 +97,14 @@ Now that the rules defining our `+` operation are loaded, you can ask for a prov
  = Z + Y + X		|	(A + B) + C = A + (B + C)
 ```
 
-## Bit more tricky case
+## A bit trickier case
 Now that we've proven that **A + B + C = C + B + A** (wow 😲), let's prove that **(X + Y)^2 = (X^2) + (2\*X\*Y) + (Y^2)** ! (I bet you didn't know that was a thing in maths, ey ? 😏)
 
 Note that in these expressions, we have to use parentheses, because no order has been established between the `+`and `*`operations (none will be established in this example). To prove this, we'll need our custom rules defining our `+` and `*` operations, which are in the `examples/numbers.apsl`.
 
 We can start a repl with `cargo run examples/numbers.apsl`, and make sure we have all the rule we need :
 
-If you dont't want to start a new shell, you can do the following :
+If you don't want to start a new shell, you can do the following :
 ```
 Algebraic Proof System Language 〉ctx clear
  Cleared context
