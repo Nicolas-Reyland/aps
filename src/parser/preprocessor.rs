@@ -49,10 +49,10 @@ pub fn remove_comments(src: &str) -> String {
                 match (c1, c2) {
                     ('/', '/') => {
                         in_single_line_comment = true;
-                    },
+                    }
                     ('/', '*') => {
                         in_multi_line_comment = true;
-                    },
+                    }
                     _ => new_src.push(c1),
                 }
             }
@@ -63,7 +63,7 @@ pub fn remove_comments(src: &str) -> String {
             None => break,
         };
     }
-    if ! (in_single_line_comment || in_multi_line_comment) {
+    if !(in_single_line_comment || in_multi_line_comment) {
         new_src.push(c1);
     }
     new_src
@@ -71,9 +71,9 @@ pub fn remove_comments(src: &str) -> String {
 
 pub fn process_macros(src: &str, imports: Option<Vec<&str>>) -> String {
     /* e.g.
-        #use numbers.apsl
-        #
-     */
+       #use numbers.apsl
+       #
+    */
     let src_len = src.len();
     if src_len < 2 {
         return src.to_string();
@@ -102,8 +102,8 @@ pub fn process_macros(src: &str, imports: Option<Vec<&str>>) -> String {
             Some(c) => c,
             None => {
                 new_src.push(c1);
-                return new_src
-            },
+                return new_src;
+            }
         }
     }
     // look for other macro instructions
@@ -120,7 +120,7 @@ pub fn process_macros(src: &str, imports: Option<Vec<&str>>) -> String {
                         new_src.push_str(&expand_macro(&macro_str, imports.clone()));
                         // file ends with a macro instruction, without a trailing '\n'
                         return new_src;
-                    },
+                    }
                 }
             }
             new_src.push_str(&expand_macro(&macro_str, imports.clone()));
@@ -153,16 +153,20 @@ fn expand_macro(macro_str: &str, imports: Option<Vec<&str>>) -> String {
             // test for import-cycle
             if imports.is_some() && imports.as_ref().unwrap().contains(&filename) {
                 panic!(
-                    "Import cycle detected for {filename} : {:?}", imports.unwrap()
+                    "Import cycle detected for {filename} : {:?}",
+                    imports.unwrap()
                 )
             }
-            match read_and_preprocess_file(filename, match imports.clone() {
-                Some(mut imports) => {
-                    imports.push(&filename);
-                    Some(imports)
+            match read_and_preprocess_file(
+                filename,
+                match imports.clone() {
+                    Some(mut imports) => {
+                        imports.push(&filename);
+                        Some(imports)
+                    }
+                    None => Some(vec![&filename]),
                 },
-                None => Some(vec![&filename]),
-            }) {
+            ) {
                 Some(s) => content.push_str(&s),
                 None => continue,
             }

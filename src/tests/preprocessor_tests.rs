@@ -1,7 +1,6 @@
 // Tests for preprocessor
 
 #[cfg(test)]
-
 use crate::preprocessor::remove_comments;
 
 #[test]
@@ -15,11 +14,6 @@ do stuff
 ";
     assert_eq!(
         remove_comments(src),
-        "\n".to_string() +
-        "this is code \n" +
-        "Ijust want to \n" +
-        "\n" +
-        "do stuff\n" +
-        "\n"
+        "\n".to_string() + "this is code \n" + "Ijust want to \n" + "\n" + "do stuff\n" + "\n"
     );
 }

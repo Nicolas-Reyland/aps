@@ -6,6 +6,8 @@ Todo List :
 - enforce operator priority or parentheses
 - use more references, less copies of data (for threads etc)
 - memoization
-- grouping
+- grouping: "A + B + C" = "(A + B) + C"
+- write new parsing tests
+- only iterate over  graph "outer layer"
 
 Urgent Fix List :
