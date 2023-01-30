@@ -1,5 +1,6 @@
 // APS Repl
 
+use crate::explorer::strip_expr_naked;
 use crate::{
     explorer::{atom2atom_expr, explore_graph, init_graph, print_graph_dot_format},
     parser::{
@@ -22,6 +23,7 @@ pub struct ReplContext {
     pub properties: Vec<AlgebraicProperty>,
     pub functions: Vec<AlgebraicFunction>,
     pub k_properties: Vec<KProperty>,
+    pub pretty_print_steps: bool,
     pub auto_break: bool,
 }
 
@@ -30,8 +32,17 @@ pub fn init_context() -> ReplContext {
         properties: Vec::new(),
         functions: Vec::new(),
         k_properties: Vec::new(),
+        pretty_print_steps: true,
         auto_break: true,
     }
+}
+
+fn reset_context(context: &mut ReplContext) {
+    context.properties.clear();
+    context.functions.clear();
+    context.k_properties.clear();
+    context.pretty_print_steps = true;
+    context.auto_break = true;
 }
 
 pub fn repl(context: ReplContext) {
@@ -72,8 +83,8 @@ pub fn repl(context: ReplContext) {
         )
         .with_command(
             Command::new("settings")
-                .arg(Arg::new("command").required(false).num_args(1))
-                .about("Print or set the break-status (auto/no-break, show)"),
+                .arg(Arg::new("command").required(true).num_args(2))
+                .about("Print or set the auto-break and expr-pretty-print (on/off/show)"),
             settings_callback,
         )
         .with_command(
@@ -92,10 +103,7 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
         .as_str()
     {
         "clear" => {
-            context.properties.clear();
-            context.functions.clear();
-            context.k_properties.clear();
-            context.auto_break = true;
+            reset_context(context);
             return Ok(Some(" Cleared context\n".to_string()));
         }
         "show" | "" => (),
@@ -137,27 +145,68 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
 }
 
 fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    match args
-        .get_one::<String>("command")
-        .unwrap_or(&"show".to_string())
-        .as_str()
-    {
-        "auto-break" => {
-            context.auto_break = true;
-            Ok(Some(" Activated auto-break.".to_string()))
+    match args.get_many::<String>("command") {
+        Some(ref_values) => {
+            let mut values = ref_values.map(|s| s.as_str());
+            let param_name = values.next().unwrap();
+            let action_name = values.next().unwrap();
+            let action = match action_name {
+                "on" => 1,
+                "off" => 2,
+                "show" => 3,
+                _ => {
+                    return Ok(Some(
+                        " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+                    ))
+                }
+            };
+            match param_name {
+                "auto-break" => {
+                    if action == 1 {
+                        context.auto_break = true;
+                        Ok(Some(format!(" Activated {}.", param_name)))
+                    } else if action == 2 {
+                        context.auto_break = false;
+                        Ok(Some(format!(" Deactivated {}.", param_name)))
+                    } else {
+                        Ok(Some(format!(
+                            " {} {}",
+                            param_name,
+                            match context.auto_break {
+                                true => "is activated",
+                                false => "is not activated",
+                            },
+                        )))
+                    }
+                }
+                "expr-pretty-print" => {
+                    if action == 1 {
+                        context.pretty_print_steps = true;
+                        Ok(Some(format!(" Activated {}.", param_name)))
+                    } else if action == 2 {
+                        context.pretty_print_steps = false;
+                        Ok(Some(format!(" Deactivated {}.", param_name)))
+                    } else {
+                        Ok(Some(format!(
+                            " {} {}",
+                            param_name,
+                            match context.pretty_print_steps {
+                                true => "is activated",
+                                false => "is not activated",
+                            },
+                        )))
+                    }
+                }
+                _ => {
+                    return Ok(Some(
+                        " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+                    ))
+                }
+            }
         }
-        "no-break" => {
-            context.auto_break = false;
-            Ok(Some(" Deactivated auto-break.".to_string()))
-        }
-        "show" => Ok(Some(String::from(match context.auto_break {
-            true => " Auto-break is activated",
-            false => " Auto-break is not activated",
-        }))),
-        command => Ok(Some(format!(
-            " Command {} is not valid (auto/no-break, show)",
-            command
-        ))),
+        None => Ok(Some(
+            " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+        )),
     }
 }
 
@@ -252,7 +301,13 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
         .iter()
         .skip(1)
         .map(|(expr, rule, common)| {
-            let expr_str = expr.to_string();
+            // Stringify expression
+            let expr_str = if context.pretty_print_steps {
+                strip_expr_naked(expr).to_string()
+            } else {
+                expr.to_string()
+            };
+            // Stringify rule
             let rule_str = match rule {
                 Some(r) => r.to_string(),
                 None => "?".to_string(),

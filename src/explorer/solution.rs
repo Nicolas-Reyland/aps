@@ -6,12 +6,12 @@ use std::{
     thread,
 };
 
+use crate::explorer::dress_up_expr;
 use crate::{
     explorer::{explore_graph, init_graph, strip_expr_naked, ExprGraph, ExprNode},
     parser::{AlgebraicFunction, AlgebraicProperty, AtomExpr, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
-use crate::explorer::dress_up_expr;
 
 pub fn solve_equality(
     properties: Vec<AlgebraicProperty>,
