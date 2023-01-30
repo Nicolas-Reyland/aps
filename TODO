@@ -7,5 +7,6 @@ Todo List :
 - use more references, less copies of data (for threads etc)
 - memoization
 - grouping: "A + B + C" = "(A + B) + C"
+- write new parsing tests
 
 Urgent Fix List :

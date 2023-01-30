@@ -8,7 +8,6 @@ use repl::{init_context, import_into_context/*, solve_equality_str*/};
 #[path = "explorer/explorer.rs"] mod explorer;
 #[path = "explorer/solution.rs"] mod solution;
 #[path = "repl/repl.rs"] mod repl;
-#[path = "either/either.rs"] mod either;
 #[path = "tests/parser_tests.rs"] pub(crate) mod parser_tests;
 #[path = "tests/solution_tests.rs"] pub(crate) mod solution_tests;
 #[path = "tests/preprocessor_tests.rs"] pub(crate) mod preprocessor_tests;

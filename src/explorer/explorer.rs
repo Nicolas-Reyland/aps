@@ -4,7 +4,6 @@ use std::{collections::HashMap, fmt, vec, thread::{JoinHandle, self}};
 
 use crate::{
     parser::{self, AtomExpr, AlgebraicProperty, Atom, Operator, parenthesized_atom/*, GeneratorElement*/, AlgebraicFunction},
-    either::Either,
 };
 
 #[derive(Debug, Clone)]
@@ -60,7 +59,7 @@ impl fmt::Display for ExprNode {
     }
 }
 
-type PropertyMapping = HashMap<Atom, Either<Atom, AtomExpr>>;
+type PropertyMapping = HashMap<Atom, Atom>;
 
 /// init a expression-graph
 pub fn init_graph(expr: AtomExpr) -> ExprGraph {
@@ -287,20 +286,6 @@ fn atom_expressions_match(
         // compare atoms
         let atom_a = &src_expr.atoms[i];
         let atom_b = &dest_expr.atoms[i];
-        // println!("atom_a = {}\natom_b = {}\n", atom_a, atom_b);
-        // map rest of src_atom to '...'
-        if atom_b == &Atom::Extension {
-            mappings.insert(atom_b.clone(), Either::Right(
-                AtomExpr {
-                    atoms: src_expr.atoms[i..].to_vec(),
-                    operator: src_expr.operator.clone(),
-                }
-            ));
-            if i + 1 != num_dest_atoms {
-                return None
-            }
-            return Some(mappings)
-        }
         match left_to_right_match(atom_a, atom_b) {
             (
                 true,
@@ -329,17 +314,14 @@ fn atom_expressions_match(
         }
         // check with already-existing mapping, or insert as new mapping
         match mappings.get(atom_b) {
-            Some(mapped_atom) => match mapped_atom {
-                Either::Left(atom_c) => {
-                    // atom_c should be equal to atom_a
-                    if atom_c != atom_a {
-                        return None
-                    }
-                },
-                Either::Right(_) => return None,
+            Some(atom_c) => {
+                // atom_c should be equal to atom_a
+                if atom_c != atom_a {
+                    return None
+                }
             },
             None => assert_eq!(
-                mappings.insert(atom_b.clone(), Either::Left(atom_a.clone())),
+                mappings.insert(atom_b.clone(), atom_a.clone()),
                 None
             ),
         }
@@ -387,7 +369,6 @@ fn left_to_right_match(
             _ => todo!()
         },
         Atom::Special(_) => (atom_a == atom_b, None),
-        Atom::Extension => todo!(),
         Atom::FunctionCall((fn_name_b, fn_expr_b)) => match atom_a {
             Atom::FunctionCall((fn_name_a, fn_expr_a)) => {
                 if fn_name_b != fn_name_a {
@@ -416,7 +397,7 @@ fn generate_new_expression(
 ) -> AtomExpr {
     // init new atoms and operator
     let mut atoms: Vec<Atom> = Vec::new();
-    let mut operator: Option<Operator> = v_expr.operator.clone();
+    let operator: Option<Operator> = v_expr.operator.clone();
     // match each atom of the v-expr
     let num_v_atoms = v_expr.atoms.len();
     let mut i = 0;
@@ -424,87 +405,72 @@ fn generate_new_expression(
     /* 'main_loop: */ while i < num_v_atoms
     {
         let atom_v = &v_expr.atoms[i];
-        // expand extension expressions (...)
-        if atom_v == &Atom::Extension {
-            let sub_expr: AtomExpr = match mappings.get(&Atom::Extension) {
-                Some(Either::Left(atom)) => panic!("Extension mapping is atom, not atom-expr: {}\n", atom),
-                Some(Either::Right(expr)) => expr.clone(),
-                None => panic!(
-                    "Could not find mapping for extension:\nMapping :\n{:#?}\nExpr-V :\n{}\nAtom-V :\n{}\n",
-                    &mappings,
-                    &v_expr,
-                    &atom_v,
-                )
-            };
-            atoms.extend(sub_expr.atoms);
-            operator = sub_expr.operator;
-        } else {
-            // normal mapping
-            atoms.push(
-                match atom_v {
-                    Atom::Parenthesized(par_v) => {
-                        parser::parenthesized_atom(generate_new_expression(par_v, mappings, functions))
-                    },
-                    Atom::Special(_) => atom_v.clone(),
-                    Atom::FunctionCall((fn_name, _)) => {
-                        for function in functions {
-                            if function.name == *fn_name {
-                                return generate_new_expression(&function.atom_expr_right, mappings, functions);
-                            }
+     
+        // normal mapping
+        atoms.push(
+            match atom_v {
+                Atom::Parenthesized(par_v) => {
+                    parser::parenthesized_atom(generate_new_expression(par_v, mappings, functions))
+                },
+                Atom::Special(_) => atom_v.clone(),
+                Atom::FunctionCall((fn_name, _)) => {
+                    for function in functions {
+                        if function.name == *fn_name {
+                            return generate_new_expression(&function.atom_expr_right, mappings, functions);
                         }
-                        // function is not defined
-                        panic!("No function named \"{fn_name}\"\nFunctions :\n{:?}", functions);
                     }
-                    /*
-                    Atom::Generator(gen_expr) => {
-                        todo!("Generator expressions not handled yet");
-                        // check for iterator (must be a numeral, or we can't generate)
-                        let num_iterations = match mappings.get(&gen_expr.iterator) {
-                            Some(Either::Left(Atom::Special(c))) => c.to_digit(10),
-                            _ => panic!("Iterator value was not a special value for generator expression.\natom_v: {atom_v}, expr_v: {v_expr}\nMappings :{:#?}\n", mappings),
-                        }.unwrap();
-                        // remove the special operator ('{' or '}')
-                        if ! operators.is_empty() {
-                            if operators.last().unwrap().op == '}' {
-                                operators.pop().unwrap();
-                            } else {
-                                // should not be added (guard at beginning of the loop)
-                                assert_eq!(v_expr.operators[i - 1].op, '{');
-                            }
-                        }
-                        // get mappings for the atoms inside the generator-expression
-                        let vec_capacity = gen_expr.elements.len() / 2;
-                        let mut mapped_atoms: Vec<Atom> = Vec::with_capacity(vec_capacity);
-                        let mut gen_operator: Option<Operator> = None;
-                        for gen_element in &gen_expr.elements {
-                            match gen_element {
-                                GeneratorElement::GenAtom(atom) => {
-                                    match mappings.get(atom) {
-                                        Some(Either::Left(atom)) => mapped_atoms.push((*atom).clone()),
-                                        Some(Either::Right(atom_expr)) => mapped_atoms.push(parenthesized_atom((*atom_expr).clone())),
-                                        None => panic!("Could not find mapping for gen-element {}", gen_element),
-                                    }
-                                },
-                                GeneratorElement::GenOperator(op) => gen_operators.push((*op).clone()),
-                            }
-                        }
-                        // generate part of the expression
-                        operator = gen_operator;
-                        for _ in 0..num_iterations {
-                            atoms.extend(mapped_atoms.clone());
-                        }
-                        i += num_iterations as usize;
-                        continue 'main_loop;
-                    }
-                    */
-                    _ => match mappings.get(atom_v) {
-                        Some(Either::Left(atom)) => atom.clone(),
-                        Some(Either::Right(_)) => panic!("Found extension instead of atom\n"),
-                        None => panic!("Could not find mapping for atom {} in expr '{}'\nMappings :\n{:#?}\n", atom_v, v_expr, mappings)
-                    }
+                    // function is not defined
+                    panic!("No function named \"{fn_name}\"\nFunctions :\n{:?}", functions);
                 }
-            )
-        }
+                /*
+                Atom::Generator(gen_expr) => {
+                    todo!("Generator expressions not handled yet");
+                    // check for iterator (must be a numeral, or we can't generate)
+                    let num_iterations = match mappings.get(&gen_expr.iterator) {
+                        Some(Either::Left(Atom::Special(c))) => c.to_digit(10),
+                        _ => panic!("Iterator value was not a special value for generator expression.\natom_v: {atom_v}, expr_v: {v_expr}\nMappings :{:#?}\n", mappings),
+                    }.unwrap();
+                    // remove the special operator ('{' or '}')
+                    if ! operators.is_empty() {
+                        if operators.last().unwrap().op == '}' {
+                            operators.pop().unwrap();
+                        } else {
+                            // should not be added (guard at beginning of the loop)
+                            assert_eq!(v_expr.operators[i - 1].op, '{');
+                        }
+                    }
+                    // get mappings for the atoms inside the generator-expression
+                    let vec_capacity = gen_expr.elements.len() / 2;
+                    let mut mapped_atoms: Vec<Atom> = Vec::with_capacity(vec_capacity);
+                    let mut gen_operator: Option<Operator> = None;
+                    for gen_element in &gen_expr.elements {
+                        match gen_element {
+                            GeneratorElement::GenAtom(atom) => {
+                                match mappings.get(atom) {
+                                    Some(Either::Left(atom)) => mapped_atoms.push((*atom).clone()),
+                                    Some(Either::Right(atom_expr)) => mapped_atoms.push(parenthesized_atom((*atom_expr).clone())),
+                                    None => panic!("Could not find mapping for gen-element {}", gen_element),
+                                }
+                            },
+                            GeneratorElement::GenOperator(op) => gen_operators.push((*op).clone()),
+                        }
+                    }
+                    // generate part of the expression
+                    operator = gen_operator;
+                    for _ in 0..num_iterations {
+                        atoms.extend(mapped_atoms.clone());
+                    }
+                    i += num_iterations as usize;
+                    continue 'main_loop;
+                }
+                */
+                _ => match mappings.get(atom_v) {
+                    Some(atom) => atom.clone(),
+                    None => panic!("Could not find mapping for atom {} in expr '{}'\nMappings :\n{:#?}\n", atom_v, v_expr, mappings)
+                }
+            }
+        );
+     
         i += 1;
     }
     AtomExpr { atoms, operator }

@@ -19,7 +19,6 @@ pub enum Atom {
     Parenthesized(AtomExpr),
     Value(char),
     Special(char),
-    Extension,
     FunctionCall((String, AtomExpr)),
     Generator(GeneratorExpr),
 }
@@ -45,10 +44,6 @@ impl PartialEq for Atom {
                 Self::FunctionCall(fn_call_a),
                 Self::FunctionCall(fn_call_b)
             ) => fn_call_a == fn_call_b,
-            (
-                Self::Extension,
-                Self::Extension
-            ) => true,
             _ => false,
         }
     }
@@ -64,7 +59,6 @@ impl fmt::Display for Atom {
             Atom::Parenthesized(x) => write!(f, "({})", x),
             Atom::Value(x) => write!(f, "{}", x),
             Atom::Special(x) => write!(f, "{}", x),
-            Atom::Extension => write!(f, "..."),
             Atom::FunctionCall((name, x)) => write!(f, "{}({})", name, x),
             Atom::Generator(x) => write!(f, "{}", x),
         }
@@ -261,16 +255,13 @@ fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i st
     sp_terminated!(tag("->"))(input)
 }
 
-/// atom_symbol : ([A-Z] | '...') sp
+/// atom_symbol : [A-Z] sp
 fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     sp_terminated!(
-        alt((
-            map(
-                satisfy(|c| c.is_alphabetic() && c.is_uppercase()),
-                Atom::Value
-            ),
-            value(Atom::Extension, tag("..."))
-        ))
+        map(
+            satisfy(|c| c.is_alphabetic() && c.is_uppercase()),
+            Atom::Value
+        )
     )(input)
 }
 
@@ -671,7 +662,6 @@ pub fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i
         )
     )(input)
 }
-
 
 /// k_group : [A-Z] [0-9]? sp
 fn k_group_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(input: &'i str) -> IResult<&'i str, (char, i8), E> {

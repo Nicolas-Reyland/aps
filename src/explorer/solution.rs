@@ -91,7 +91,7 @@ pub fn solve_equality(
         }
         // increment the depth
         depth += 1;
-        // manual calculation limits
+        // manual calculation limits (see 'settings' command)
         if auto_break {
             let num_left_nodes = {
                 let left_mutex_clone = Arc::clone(&left_mutex);
@@ -120,6 +120,12 @@ pub fn solve_equality(
     None
 }
 
+/// A solution has been found (common element in the two graphs)
+/// Now, the 'route' that links the root nodes from each graph has to be found
+/// Since the nodes are unique and hierarchically ordered,
+/// there is only one such route in the graphs. It is also guaranteed that this
+/// path (route) is the shortest possible route between the two root nodes
+/// (with the given properties).
 fn find_route(
     left: &ExprGraph,
     right: &ExprGraph,
