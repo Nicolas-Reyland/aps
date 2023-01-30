@@ -1,5 +1,5 @@
 Todo List :
-- optimize the shit out of everything
+- optimize everything
 - different parsers for generators (separate start & end)
 - enforce operator priority
 - use more references, less copies of data (for threads etc)
