@@ -83,7 +83,8 @@ pub fn repl(context: ReplContext) {
         )
         .with_command(
             Command::new("settings")
-                .arg(Arg::new("command").required(true).num_args(2))
+                .arg(Arg::new("param").required(true).num_args(1))
+                .arg(Arg::new("action").required(false).num_args(1))
                 .about("Print or set the auto-break and expr-pretty-print (on/off/show)"),
             settings_callback,
         )
@@ -145,68 +146,69 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
 }
 
 fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    match args.get_many::<String>("command") {
-        Some(ref_values) => {
-            let mut values = ref_values.map(|s| s.as_str());
-            let param_name = values.next().unwrap();
-            let action_name = values.next().unwrap();
-            let action = match action_name {
-                "on" => 1,
-                "off" => 2,
-                "show" => 3,
-                _ => {
-                    return Ok(Some(
-                        " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
-                    ))
-                }
-            };
-            match param_name {
-                "auto-break" => {
-                    if action == 1 {
-                        context.auto_break = true;
-                        Ok(Some(format!(" Activated {}.", param_name)))
-                    } else if action == 2 {
-                        context.auto_break = false;
-                        Ok(Some(format!(" Deactivated {}.", param_name)))
-                    } else {
-                        Ok(Some(format!(
-                            " {} {}",
-                            param_name,
-                            match context.auto_break {
-                                true => "is activated",
-                                false => "is not activated",
-                            },
-                        )))
-                    }
-                }
-                "expr-pretty-print" => {
-                    if action == 1 {
-                        context.pretty_print_steps = true;
-                        Ok(Some(format!(" Activated {}.", param_name)))
-                    } else if action == 2 {
-                        context.pretty_print_steps = false;
-                        Ok(Some(format!(" Deactivated {}.", param_name)))
-                    } else {
-                        Ok(Some(format!(
-                            " {} {}",
-                            param_name,
-                            match context.pretty_print_steps {
-                                true => "is activated",
-                                false => "is not activated",
-                            },
-                        )))
-                    }
-                }
-                _ => {
-                    return Ok(Some(
-                        " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
-                    ))
-                }
+    let param_name = match args.get_one::<String>("param") {
+        Some(x) => x.as_str(),
+        None => {
+            return Ok(Some(
+                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+            ))
+        }
+    };
+    let action_name = match args.get_one::<String>("action") {
+        Some(x) => x.as_str(),
+        None => "show",
+    };
+    let action = match action_name {
+        "on" => 1,
+        "off" => 2,
+        "show" => 3,
+        _ =>
+            return Ok(Some(
+                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+            )),
+    };
+    match param_name {
+        "auto-break" => {
+            if action == 1 {
+                context.auto_break = true;
+                Ok(Some(format!(" Activated {}.", param_name)))
+            } else if action == 2 {
+                context.auto_break = false;
+                Ok(Some(format!(" Deactivated {}.", param_name)))
+            } else {
+                Ok(Some(format!(
+                    " {} {}",
+                    param_name,
+                    match context.auto_break {
+                        true => "is activated",
+                        false => "is not activated",
+                    },
+                )))
             }
         }
-        None => Ok(Some(
-            " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
-        )),
+        "expr-pretty-print" => {
+            if action == 1 {
+                context.pretty_print_steps = true;
+                Ok(Some(format!(" Activated {}.", param_name)))
+            } else if action == 2 {
+                context.pretty_print_steps = false;
+                Ok(Some(format!(" Deactivated {}.", param_name)))
+            } else {
+                Ok(Some(format!(
+                    " {} {}",
+                    param_name,
+                    match context.pretty_print_steps {
+                        true => "is activated",
+                        false => "is not activated",
+                    },
+                )))
+            }
+        }
+        _ => {
+            return Ok(Some(
+                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+            ))
+        }
     }
 }
 
