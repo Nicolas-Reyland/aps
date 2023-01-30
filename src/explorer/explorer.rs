@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::parser::{
-    self, parenthesized_atom, /*, GeneratorElement*/
+    parenthesized_atom, /*, GeneratorElement*/
     AlgebraicFunction, AlgebraicProperty, Atom, AtomExpr, Operator,
 };
 
@@ -223,7 +223,7 @@ fn print_node_dot_format(node: &ExprNode) -> String {
 /// apply the property to the source expression
 /// a property is an equality between two expressions,
 /// so the left and right sides of the property are matched to the source expression
-fn apply_property(
+pub fn apply_property(
     src_expr: &AtomExpr,
     property: &AlgebraicProperty,
     functions: &Vec<AlgebraicFunction>,
@@ -595,81 +595,4 @@ pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
         atoms: vec![atom],
         operator: None,
     }
-}
-
-#[test]
-fn test_expr_stripping() {
-    let expr_a = match parser::atom_expr_p::<parser::ApsParserKind>("((A + B) + C) + D") {
-        Ok(("", expr)) => expr,
-        Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-            rest, parsed,
-        ),
-        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-    };
-    let expr_b = match parser::atom_expr_p::<parser::ApsParserKind>("X + ((A * B) * C) + D") {
-        Ok(("", expr)) => expr,
-        Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-            rest, parsed,
-        ),
-        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-    };
-    println!("expr_a = {}", expr_a);
-    println!("strip(expr_a) = {}", strip_expr_naked(&expr_a));
-    println!("expr_b = {}", expr_b);
-    println!("strip(expr_b) = {}", strip_expr_naked(&expr_b));
-}
-
-#[test]
-fn test_expr_dressing_up() {
-    let expr_a = match parser::atom_expr_p::<parser::ApsParserKind>("A + B + C + D") {
-        Ok(("", expr)) => expr,
-        Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-            rest, parsed,
-        ),
-        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-    };
-    let expr_b = match parser::atom_expr_p::<parser::ApsParserKind>("X + (A * B * C) + D") {
-        Ok(("", expr)) => expr,
-        Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-            rest, parsed,
-        ),
-        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-    };
-    println!("expr_a = {}", expr_a);
-    println!("dress_up(expr_a) = {}", dress_up_expr(&expr_a));
-    println!("expr_b = {}", expr_b);
-    println!("dress_up(expr_b) = {}", dress_up_expr(&expr_b));
-}
-
-#[test]
-fn test_some_things() {
-    let src_expr = match parser::atom_expr_p::<parser::ApsParserKind>("(X + Y) + Z") {
-        Ok(("", expr)) => expr,
-        Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-            rest, parsed,
-        ),
-        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-    };
-    let property =
-        match parser::root::<parser::ApsParserKind>("+ :: { (A + B) + C = A + (B + C) ; }") {
-            Ok(("", parsed)) => match parsed.first().unwrap() {
-                parser::AlgebraicObject::PropertyGroup(parser::BraceGroup {
-                    properties,
-                    operator: _,
-                }) => properties.first().unwrap().clone(),
-                _ => panic!("No a brace group:\n{:#?}\n", parsed),
-            },
-            Ok((rest, parsed)) => panic!(
-                "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-                rest, parsed
-            ),
-            Err(err) => panic!("Failed to parse property:\n{:#?}", err),
-        };
-    let new_expressions = apply_property(&src_expr, &property, &vec![]);
-    println!("New Expressions :\n{:#?}\n", new_expressions);
 }

@@ -6,5 +6,8 @@ Todo List :
 - memoization
 - write new parsing tests
 - only iterate over  graph "outer layer" (doesn't seem to work somehow)
+- re-implement generators using a two-argument function
+- special values can hbe more than 9 ([0-9]+)
+- atom values can be more than one char long
 
 Urgent Fix List :

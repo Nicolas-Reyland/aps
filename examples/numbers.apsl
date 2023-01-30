@@ -38,5 +38,5 @@ _ :: {
     // Times two
     A * 2 = A + A ;
     // Power of two
-    A ^ 2 = A *A ;
+    A ^ 2 = A * A ;
 }

@@ -45,6 +45,33 @@ fn reset_context(context: &mut ReplContext) {
     context.auto_break = true;
 }
 
+// used in settings_callback
+macro_rules! handle_setting {
+    ($switch_var:expr, $action:ident, $param:ident) => {
+        match $action {
+            "on" => {
+                $switch_var = true;
+                Ok(Some(format!(" Activated {}.", $param)))
+            },
+            "off" => {
+                $switch_var = false;
+                Ok(Some(format!(" Deactivated {}.", $param)))
+            },
+            "show" => {
+                Ok(Some(format!(
+                    " {} {}",
+                    $param,
+                    match $switch_var {
+                        true => "is activated",
+                        false => "is not activated",
+                    },
+                )))
+            },
+            _ => Ok(Some(" usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string()))
+        }
+    }
+}
+
 pub fn repl(context: ReplContext) {
     let mut repl = Repl::new(context)
         .with_name("Algebraic Proof System Language ")
@@ -148,7 +175,7 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         Some(x) => x.as_str(),
         None => {
             return Ok(Some(
-                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string()
             ))
         }
     };
@@ -156,58 +183,14 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         Some(x) => x.as_str(),
         None => "show",
     };
-    let action = match action_name {
-        "on" => 1,
-        "off" => 2,
-        "show" => 3,
-        _ => {
-            return Ok(Some(
-                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
-            ))
-        }
-    };
     match param_name {
-        "auto-break" => {
-            if action == 1 {
-                context.auto_break = true;
-                Ok(Some(format!(" Activated {}.", param_name)))
-            } else if action == 2 {
-                context.auto_break = false;
-                Ok(Some(format!(" Deactivated {}.", param_name)))
-            } else {
-                Ok(Some(format!(
-                    " {} {}",
-                    param_name,
-                    match context.auto_break {
-                        true => "is activated",
-                        false => "is not activated",
-                    },
-                )))
-            }
-        }
-        "expr-pretty-print" => {
-            if action == 1 {
-                context.pretty_print_steps = true;
-                Ok(Some(format!(" Activated {}.", param_name)))
-            } else if action == 2 {
-                context.pretty_print_steps = false;
-                Ok(Some(format!(" Deactivated {}.", param_name)))
-            } else {
-                Ok(Some(format!(
-                    " {} {}",
-                    param_name,
-                    match context.pretty_print_steps {
-                        true => "is activated",
-                        false => "is not activated",
-                    },
-                )))
-            }
-        }
+        "auto-break" => handle_setting!(context.auto_break, action_name, param_name),
+        "expr-pretty-print" => handle_setting!(context.pretty_print_steps, action_name, param_name),
         _ => {
             return Ok(Some(
                 " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
             ))
-        }
+        },
     }
 }
 

@@ -4,15 +4,17 @@ use repl::{import_into_context /*, solve_equality_str*/, init_context};
 use std::env;
 
 #[path = "explorer/explorer.rs"]
-mod explorer;
+pub(crate) mod explorer;
 #[path = "parser/parser.rs"]
-mod parser;
+pub(crate) mod parser;
 #[path = "tests/parser_tests.rs"]
 pub(crate) mod parser_tests;
 #[path = "parser/preprocessor.rs"]
 pub(crate) mod preprocessor;
 #[path = "tests/preprocessor_tests.rs"]
 pub(crate) mod preprocessor_tests;
+#[path = "tests/explorer_tests.rs"]
+pub(crate) mod explorer_tests;
 #[path = "repl/repl.rs"]
 mod repl;
 #[path = "explorer/solution.rs"]
