@@ -18,8 +18,8 @@ pub type ApsParserKind<'i> = (&'i str, ErrorKind);
 #[derive(Debug, Clone, Hash, Eq)]
 pub enum Atom {
     Parenthesized(AtomExpr),
-    Value(char),
-    Special(char),
+    Value(String),
+    Special(i32),
     FunctionCall((String, AtomExpr)),
     Generator(GeneratorExpr),
 }
@@ -248,15 +248,22 @@ fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i st
 fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     sp_terminated!(map(
         satisfy(|c| c.is_alphabetic() && c.is_uppercase()),
-        Atom::Value
+        |c| Atom::Value(String::from(c))
     ))(input)
 }
 
-/// special_symbol : [0-9] sp
+/// special_symbol : [0-9]+ sp
 fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
-        sp_terminated!(satisfy(|c: char| c.is_numeric())),
-        Atom::Special,
+        sp_terminated!(
+            many1(
+                map(
+                    satisfy(|c: char| c.is_numeric()),
+                    |c: char| c
+                )
+            )
+        ),
+        |s| Atom::Special(s.into_iter().collect::<String>().parse().unwrap()),
     )(input)
 }
 

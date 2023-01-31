@@ -12,21 +12,21 @@ fn test_brace_def_p() {
                 properties: vec![
                     AlgebraicProperty {
                         atom_expr_left: AtomExpr {
-                            atoms: vec![Atom::Value('A',),],
+                            atoms: vec![Atom::Value("A".to_string(),),],
                             operator: None,
                         },
                         atom_expr_right: AtomExpr {
-                            atoms: vec![Atom::Value('A',),],
+                            atoms: vec![Atom::Value("A".to_string(),),],
                             operator: None,
                         },
                     },
                     AlgebraicProperty {
                         atom_expr_left: AtomExpr {
-                            atoms: vec![Atom::Value('B',),],
+                            atoms: vec![Atom::Value("B".to_string(),),],
                             operator: None,
                         },
                         atom_expr_right: AtomExpr {
-                            atoms: vec![Atom::Value('C',),],
+                            atoms: vec![Atom::Value("C".to_string(),),],
                             operator: None,
                         },
                     },
@@ -45,11 +45,11 @@ fn test_fn_def_p() {
             AlgebraicFunction {
                 name: "square".to_string(),
                 atom_expr_left: AtomExpr {
-                    atoms: vec![Atom::Value('A',),],
+                    atoms: vec![Atom::Value("A".to_string(),),],
                     operator: None,
                 },
                 atom_expr_right: AtomExpr {
-                    atoms: vec![Atom::Value('A',), Atom::Special('2',),],
+                    atoms: vec![Atom::Value("A".to_string(),), Atom::Special(2,),],
                     operator: Some(Operator { op: '^' }),
                 },
             },
@@ -81,7 +81,7 @@ fn test_fn_call_p() {
             Atom::FunctionCall((
                 "exp".to_string(),
                 AtomExpr {
-                    atoms: vec![Atom::Value('A',), Atom::Special('2',),],
+                    atoms: vec![Atom::Value("A".to_string(),), Atom::Special(2,),],
                     operator: Some(Operator { op: '^' }),
                 }
             ))

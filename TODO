@@ -1,7 +1,6 @@
 Todo List :
 - optimize everything
 - different parsers for generators (separate start & end)
-- enforce operator priority
 - use more references, less copies of data (for threads etc)
 - memoization
 - write new parsing tests
@@ -9,5 +8,7 @@ Todo List :
 - re-implement generators using a two-argument function
 - special values can hbe more than 9 ([0-9]+)
 - atom values can be more than one char long
+- fixed number of worker threads instead of one thread per match
+- implement functions
 
 Urgent Fix List :
