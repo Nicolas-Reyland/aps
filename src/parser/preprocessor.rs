@@ -154,7 +154,9 @@ fn expand_macro(macro_str: &str, imports: Option<Vec<&str>>) -> String {
             // test for import-cycle
             if imports.is_some() && imports.as_ref().unwrap().contains(&filename) {
                 panic!(
-                    "Import cycle detected for {} : {:?}", filename, imports.unwrap()
+                    "Import cycle detected for {} : {:?}",
+                    filename,
+                    imports.unwrap()
                 )
             }
             match read_and_preprocess_file(
@@ -170,8 +172,8 @@ fn expand_macro(macro_str: &str, imports: Option<Vec<&str>>) -> String {
                 Some(s) => content.push_str(&s),
                 None => {
                     eprintln!(" import for '{}' was unsuccessful (#use)", filename);
-                    continue
-                },
+                    continue;
+                }
             }
             // to separate file contents (which might not even end with a new-line char)
             content.push('\n');

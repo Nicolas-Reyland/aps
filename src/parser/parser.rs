@@ -1,7 +1,9 @@
 // APS Lang Parser
 
+use std::fmt::write;
 use std::{boxed::Box, fmt};
 
+use crate::parser::OperatorAssociativity::LeftAssociative;
 use nom::multi::separated_list1;
 use nom::{
     branch::alt,
@@ -16,6 +18,7 @@ use nom::{
 
 pub type ApsParserKind<'i> = (&'i str, ErrorKind);
 
+/* Types */
 #[derive(Debug, Clone, Hash, Eq)]
 pub enum Atom {
     Parenthesized(AtomExpr),
@@ -56,7 +59,7 @@ impl fmt::Display for Atom {
                     write!(f, ", {}", arg)?;
                 }
                 write!(f, ")")
-            },
+            }
             Atom::Generator(x) => write!(f, "{}", x),
         }
     }
@@ -72,6 +75,7 @@ pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub struct Operator {
     pub op: char,
+    pub associativity: OperatorAssociativity,
 }
 
 impl fmt::Display for Operator {
@@ -80,11 +84,34 @@ impl fmt::Display for Operator {
     }
 }
 
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub enum OperatorAssociativity {
+    LeftAssociative,
+    RightAssociative,
+    NonAssociative,
+}
+
+static DEFAULT_OPERATOR_ASSOCIATIVITY: OperatorAssociativity = LeftAssociative;
+
+impl fmt::Display for OperatorAssociativity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}-associative",
+            match self {
+                LeftAssociative => "left",
+                OperatorAssociativity::RightAssociative => "right",
+                OperatorAssociativity::NonAssociative => "non",
+            }
+        )
+    }
+}
+
 #[derive(Debug, Clone, Hash, Eq)]
 pub struct AtomExpr {
     pub atoms: Vec<Atom>,
     // There is only one operator : A + B * C is actually A + (B * C)
-    // since oeprator precedence is not inherently known
+    // since operator precedence is not inherently known
     pub operator: Option<Operator>,
 }
 
@@ -215,6 +242,7 @@ pub enum AlgebraicObject {
     Function(AlgebraicFunction),
 }
 
+/* Parsers */
 macro_rules! sp_preceded {
     ($parser:expr) => {
         preceded(sp_p, $parser)
@@ -235,7 +263,10 @@ fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str,
 
 /// op : [+-*/@^] sp
 fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
-    map(sp_terminated!(one_of("+-*/@^")), |op| Operator { op })(input)
+    map(sp_terminated!(one_of("+-*/@^")), |op_c| Operator {
+        op: op_c,
+        associativity: DEFAULT_OPERATOR_ASSOCIATIVITY,
+    })(input)
 }
 
 /// fn_name : [a-z_][a-z0-9_] sp

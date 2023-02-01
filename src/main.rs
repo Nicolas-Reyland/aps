@@ -1,6 +1,6 @@
 /* Parser for Algebraic Proofing System Language */
 
-use repl::{import_into_context, solve_equality_str, init_context};
+use repl::{import_into_context, init_context, solve_equality_str};
 use std::env;
 
 #[path = "explorer/explorer.rs"]

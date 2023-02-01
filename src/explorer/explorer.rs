@@ -302,7 +302,7 @@ fn match_and_apply(
                 expr_args
                     .into_iter()
                     .enumerate()
-                    .map(move |(arg_i, arg)| (atom_i, arg_i, arg))
+                    .map(move |(arg_i, arg)| (atom_i, arg_i, arg)),
             ),
             _ => None,
         })
@@ -320,7 +320,10 @@ fn match_and_apply(
                             fn_args[arg_i] = (*new_arg).clone();
                             (fn_name, fn_args)
                         }),
-                        _ => panic!("Did not find function call at index {}: {:#?}", sub_i, new_atoms[sub_i]),
+                        _ => panic!(
+                            "Did not find function call at index {}: {:#?}",
+                            sub_i, new_atoms[sub_i]
+                        ),
                     };
                     AtomExpr {
                         atoms: new_atoms,
@@ -329,7 +332,8 @@ fn match_and_apply(
                 })
                 .collect::<Vec<AtomExpr>>(),
         );
-    }    new_expressions
+    }
+    new_expressions
 }
 
 fn atom_expressions_match(
@@ -448,13 +452,13 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
                                         // W ^ 2 mapped to A
                                         // 2 * Z mapped to B
                                         if old_arg_value != arg_value {
-                                            return (false, None)
+                                            return (false, None);
                                         }
-                                    },
+                                    }
                                     _ => (),
                                 }
                             }
-                        },
+                        }
                         None => return (false, None),
                     }
                 }
