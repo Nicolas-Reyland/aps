@@ -141,7 +141,7 @@ pub fn explore_graph(
     // join all the handles
     for handle in handles {
         let (p_index, node_index, new_expressions) = handle.join().unwrap();
-        let property = &properties[p_index];
+        let property: &AlgebraicProperty = &properties[p_index];
         let node = &graph.nodes[node_index];
         new_nodes.extend(new_expressions.iter().map(|new_expr| {
             (
@@ -244,9 +244,9 @@ pub fn apply_property(
 }
 
 /// try to match the src_expr to the left_expr, then generate a new expression based on right_expr
-/// this returns a vector containing zero (if there is no match) or multiple (there is a match) new experssions
+/// this returns a vector containing zero (if there is no match) or multiple (there is a match) new expressions
 /// this can yield multiple new expressions, because the source expression if checked for matching, but also all
-/// its 'sub-expressions'
+/// its 'sub-expressions' (including arguments of function calls)
 fn match_and_apply(
     src: &AtomExpr,
     left: &AtomExpr,
@@ -264,16 +264,12 @@ fn match_and_apply(
         None => (),
     }
     // recursively call 'atom_expressions_match' on the sub-expressions
-    let num_src_atoms = src.atoms.len();
     for (sub_i, sub) in src
         .atoms
         .iter()
         .enumerate()
         .filter_map(|(atom_i, atom)| match atom {
             Atom::Parenthesized(sub_expr) => Some((atom_i, (*sub_expr).clone())),
-            Atom::FunctionCall(_) if num_src_atoms != 1 => {
-                Some((atom_i, atom2atom_expr((*atom).clone())))
-            }
             _ => None,
         })
     {
@@ -285,8 +281,8 @@ fn match_and_apply(
                     // only the sub changes, compared to the src. no other atoms
                     let mut src_atoms_prefix = src.atoms[..sub_i].to_vec().clone();
                     src_atoms_prefix.push(parenthesized_atom(sub_tr.clone()));
-                    let src_atoms_suffix = src.atoms[sub_i + 1..].to_vec().clone();
-                    src_atoms_prefix.extend(src_atoms_suffix);
+                    let mut src_atoms_suffix = src.atoms[sub_i + 1..].to_vec().clone();
+                    src_atoms_prefix.append(&mut src_atoms_suffix);
                     AtomExpr {
                         atoms: src_atoms_prefix,
                         operator: src.operator.clone(),
@@ -295,7 +291,45 @@ fn match_and_apply(
                 .collect::<Vec<AtomExpr>>(),
         );
     }
-    new_expressions
+
+    // recursively call 'atom_expressions_match' on the function calls
+    for (sub_i, arg_i, sub) in src
+        .atoms
+        .iter()
+        .enumerate()
+        .filter_map(|(atom_i, atom)| match atom {
+            Atom::FunctionCall((_, expr_args)) => Some(
+                expr_args
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(arg_i, arg)| (atom_i, arg_i, arg))
+            ),
+            _ => None,
+        })
+        .flatten()
+    {
+        new_expressions.extend(
+            match_and_apply(&sub, left, right, functions)
+                .iter()
+                .map(|new_arg| {
+                    // reconstruct like that : <everything b4> func(<args b4> (new arg) <args after>) <everything after>
+                    // only the sub changes, compared to the src. no other atoms
+                    let mut new_atoms = src.atoms.clone();
+                    new_atoms[sub_i] = match new_atoms[sub_i].clone() {
+                        Atom::FunctionCall((fn_name, mut fn_args)) => Atom::FunctionCall({
+                            fn_args[arg_i] = (*new_arg).clone();
+                            (fn_name, fn_args)
+                        }),
+                        _ => panic!("Did not find function call at index {}: {:#?}", sub_i, new_atoms[sub_i]),
+                    };
+                    AtomExpr {
+                        atoms: new_atoms,
+                        operator: src.operator.clone(),
+                    }
+                })
+                .collect::<Vec<AtomExpr>>(),
+        );
+    }    new_expressions
 }
 
 fn atom_expressions_match(
