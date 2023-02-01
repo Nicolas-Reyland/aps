@@ -739,12 +739,7 @@ fn map_over_all_sub_expressions(
                     // map each argument with f
                     args.iter()
                         .map(|arg_expr| {
-                            map_over_all_sub_expressions(
-                                &arg_expr.atoms,
-                                arg_expr.operator.clone(),
-                                operators,
-                                f,
-                            )
+                            f(arg_expr, operators)
                         })
                         .collect(),
                 )),
