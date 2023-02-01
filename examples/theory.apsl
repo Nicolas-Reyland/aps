@@ -46,6 +46,11 @@ K << {
 	A ^ 1 = A ;;
 }
 
+/* Generator */
+_ :: {
+    A ^ N = # N : * : A # ; // produces A * A * ... * A (N times)
+}
+
 square 	:: A -> A ^ 2 ;;
 sqrt	:: A ^ 2 -> A ;;
 

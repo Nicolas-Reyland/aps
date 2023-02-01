@@ -49,10 +49,6 @@ impl PartialEq for ExprNode {
         // not comparing neighbours, nor depths
         self.atom_expr == other.atom_expr
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
-    }
 }
 
 impl fmt::Display for ExprNode {
@@ -130,7 +126,7 @@ pub fn explore_graph(
         // The transformation from 1 to 2 is "A + B = B + A". We don't want
         // to run this transformation again on 2 ("Y + X"),
         // since it will only give 1 back ("X + Y"), where we came from.
-        'properties: for property in properties
+        for property in properties
             .iter()
             .filter(|property| !node_has_transform || node_transform != **property)
         {
@@ -474,6 +470,9 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
             }
             _ => (false, None),
         },
+        Atom::Sequential(seq_expr) => {
+            todo!("left_to_right match this: {}", seq_expr)
+        }
     }
 }
 
@@ -515,8 +514,11 @@ fn generate_new_expression(
                 panic!(
                     "No function named \"{}\"\nFunctions :\n{:?}",
                     fn_name, functions
-                );
-            }
+                )
+            },
+            Atom::Sequential(seq) => {
+                todo!("Sequential expressions not done yet: {}", seq)
+            },
             /*
             Atom::Generator(gen_expr) => {
                 todo!("Generator expressions not handled yet");

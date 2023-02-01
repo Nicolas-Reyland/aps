@@ -29,6 +29,7 @@ pub enum Atom {
     Value(String),
     Special(i32),
     FunctionCall((String, Vec<AtomExpr>)),
+    Sequential(Box<SequentialExpr>),
 }
 
 impl PartialEq for Atom {
@@ -40,12 +41,9 @@ impl PartialEq for Atom {
             (Self::FunctionCall(fn_call_a), Self::FunctionCall(fn_call_b)) => {
                 fn_call_a == fn_call_b
             }
+            (Self::Sequential(seq_a), Self::Sequential(seq_b)) => seq_a == seq_b,
             _ => false,
         }
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
     }
 }
 
@@ -62,6 +60,7 @@ impl fmt::Display for Atom {
                 }
                 write!(f, ")")
             }
+            Atom::Sequential(x) => write!(f, "{}", x),
         }
     }
 }
@@ -76,7 +75,6 @@ pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
 #[derive(Debug, Clone, Hash, Eq)]
 pub struct Operator {
     pub op: char,
-    pub associativity: OperatorAssociativity,
 }
 
 impl fmt::Display for Operator {
@@ -88,9 +86,6 @@ impl fmt::Display for Operator {
 impl PartialEq for Operator {
     fn eq(&self, other: &Self) -> bool {
         self.op == other.op
-    }
-    fn ne(&self, other: &Self) -> bool {
-        !(self == other)
     }
 }
 
@@ -157,8 +152,26 @@ impl fmt::Display for AtomExpr {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SequentialExpr {
+    pub operator: Operator,
+    pub enumerator: Atom,
+    pub body: Atom,
+}
+
+impl fmt::Display for SequentialExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "# {} : {} : {} #",
+            self.operator, self.enumerator, self.body
+        )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BraceGroup {
     pub operator: Operator,
+    pub associativity: Option<OperatorAssociativity>,
     pub properties: Vec<AlgebraicProperty>,
 }
 
@@ -244,10 +257,7 @@ fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str,
 
 /// op : [+-*/@^$%] sp
 fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
-    map(sp_terminated!(one_of("+-*/@^$%")), |op_c| Operator {
-        op: op_c,
-        associativity: Unknown,
-    })(input)
+    map(sp_terminated!(one_of("+-*/@^$%")), |op| Operator { op })(input)
 }
 
 /// fn_name : [a-z_][a-z0-9_] sp
@@ -323,6 +333,32 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
+/// sequential_expr : '#' sp op sp ':' sp atom sp ':' sp atom sp '#'
+pub fn sequential_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str,
+) -> IResult<&'i str, Atom, E> {
+    context(
+        "sequential expr",
+        map(
+            tuple((
+                preceded(sp_preceded!(char_p('#')), op_p),
+                preceded(sp_terminated!(sp_preceded!(char_p(':'))), atom_p),
+                preceded(
+                    sp_terminated!(sp_preceded!(char_p(':'))),
+                    terminated(atom_p, sp_preceded!(char_p('#'))),
+                ),
+            )),
+            |(operator, enumerator, body)| {
+                Atom::Sequential(Box::new(SequentialExpr {
+                    operator,
+                    enumerator,
+                    body,
+                }))
+            },
+        ),
+    )(input)
+}
+
 /// equ : '=' sp
 fn equ_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     sp_terminated!(recognize(char_p('=')))(input)
@@ -360,10 +396,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 alt((
                     op_p,
-                    sp_terminated!(map(satisfy(|c| c == '_'), |op| Operator {
-                        op,
-                        associativity: Unknown,
-                    })),
+                    sp_terminated!(map(satisfy(|c| c == '_'), |op| Operator { op })),
                 )),
                 opt(sp_terminated!(alt((
                     map(alt((tag("lr"), tag("rl"),)), |_| LeftRightAssociative,),
@@ -376,14 +409,9 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                 property_list_p,
                 sp_terminated!(char_p('}')),
             )),
-            |(operator, op_ass, _, _, properties, _)| BraceGroup {
-                operator: match op_ass {
-                    Some(associativity) if operator.op != '_' => Operator {
-                        op: operator.op,
-                        associativity,
-                    },
-                    _ => operator,
-                },
+            |(operator, associativity, _, _, properties, _)| BraceGroup {
+                operator,
+                associativity,
                 properties,
             },
         ),
@@ -456,10 +484,7 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// atom : atom_symbol | special_symbol | parenthesized_atom | fn_call_p
-///
-/// not parsing generator_expr because it actually represents 'atom op' or 'op atom'.
-/// parsing it in atom_expr tho
+/// atom : atom_symbol | special_symbol | parenthesized_atom | fn_call | sequential_expr_p
 fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
@@ -470,6 +495,7 @@ fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             special_symbol_p,
             parenthesized_atom_p,
             fn_call_p,
+            sequential_expr_p,
         )),
     )(input)
 }
@@ -540,6 +566,7 @@ fn atom_expr_end_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
 }
 
 /// atom_expr : big_atom (op big_atom)*
+/// NOW: equivalent to simple_atom_expr
 pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AtomExpr, E> {
@@ -568,12 +595,12 @@ pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// simple_atom_expr : big_atom (op big_atom)*
+/// simple_atom_expr : atom_p (op atom_p)*
 pub fn simple_atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AtomExpr, E> {
     context(
-        "atom expr",
+        "simple atom expr",
         map(
             tuple((atom_p, many0(tuple((op_p, atom_p))))),
             |(first_atom, rest)| {
@@ -673,12 +700,15 @@ pub fn split_algebraic_objects(
             }
             AlgebraicObject::PropertyGroup(bg) => {
                 properties.extend(bg.properties);
-                if bg.operator.op != '_' && bg.operator.associativity != Unknown {
-                    match operators.insert(bg.operator.op, bg.operator.associativity) {
-                        Some(ass) if ass != bg.operator.associativity => panic!(
-                            "Two different associativities of operator {}: {} (old) and {} (new)",
-                            bg.operator.op, ass, bg.operator.associativity
-                        ),
+                if bg.operator.op != '_' && bg.associativity != None {
+                    let old_assoc = operators.insert(bg.operator.op, bg.associativity.unwrap());
+                    match old_assoc {
+                        Some(assoc) if old_assoc != bg.associativity => {
+                            panic!(
+                                "Two different associativities of operator {}: {} (old) and {} (new)",
+                                bg.operator.op, assoc, bg.associativity.unwrap(),
+                            )
+                        }
                         _ => (),
                     }
                 }
