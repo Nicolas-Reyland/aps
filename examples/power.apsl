@@ -1,0 +1,12 @@
+^ :: {
+    // Null element
+    A ^ 0 = 1 ;
+    // Identity element
+    A ^ 1 = A ;
+}
+
+_ :: {
+    (A ^ B) ^ C = A ^ (B * C) ;
+    (A ^ K) * (A ^ P) = A ^ (K + P) ;
+    (A ^ K) * (B ^ K) = (A * B) ^ K ;
+}

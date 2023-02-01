@@ -7,5 +7,6 @@ Todo List :
 - only iterate over  graph "outer layer" (doesn't seem to work somehow)
 - re-implement generators using a two-argument function
 - atom values can be more than one char long
+- operator associativity (left/right/none)
 
 Urgent Fix List :

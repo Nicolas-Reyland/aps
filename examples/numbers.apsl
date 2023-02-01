@@ -2,18 +2,9 @@
 
 #use examples/plus.apsl
 #use examples/mult.apsl
+#use examples/power.apsl
 
 K :: R ;
-
-^ :: {
-    // Null element
-    A ^ 0 = 1 ;
-    // Identity element
-    A ^ 1 = A ;
-    // // Additional rules on ^
-    // (A ^ K) * (A ^ P) = A ^ (K + P) ;
-    // (A ^ K) * (B ^ K) = (A * B) ^ K ;
-}
 
 _ :: {
     // Distributivity
