@@ -1,6 +1,8 @@
 // APS Lang Parser
 
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::hash::Hash;
 
 use crate::parser::OperatorAssociativity::{
     LeftAssociative, LeftRightAssociative, NonAssociative, RightAssociative, Unknown,
@@ -9,7 +11,7 @@ use nom::multi::separated_list1;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
-    character::complete::{char, one_of, satisfy},
+    character::complete::{char as char_p, one_of, satisfy},
     combinator::{map, opt, recognize, value},
     error::{context, ContextError, ErrorKind, ParseError},
     multi::{many0, many1},
@@ -18,6 +20,7 @@ use nom::{
 };
 
 pub type ApsParserKind<'i> = (&'i str, ErrorKind);
+pub type AssociativityHashMap = HashMap<char, OperatorAssociativity>;
 
 /* Types */
 #[derive(Debug, Clone, Hash, Eq)]
@@ -153,13 +156,13 @@ impl fmt::Display for AtomExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BraceGroup {
     pub operator: Operator,
     pub properties: Vec<AlgebraicProperty>,
 }
 
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AlgebraicProperty {
     pub atom_expr_left: AtomExpr,
     pub atom_expr_right: AtomExpr,
@@ -172,7 +175,7 @@ impl fmt::Display for AlgebraicProperty {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct AlgebraicFunction {
     pub name: String,
     pub atom_expr_args: Vec<AtomExpr>,
@@ -194,7 +197,7 @@ impl fmt::Display for AlgebraicFunction {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct KProperty {
     pub undefined_property: bool,
     pub base: char,
@@ -213,7 +216,7 @@ impl fmt::Display for KProperty {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum AlgebraicObject {
     KProperty(KProperty),
     PropertyGroup(BraceGroup),
@@ -288,7 +291,7 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     context(
         "parenthesized atom",
         map(
-            sp_terminated!(preceded(char('('), terminated(atom_expr_p, char(')')))),
+            sp_terminated!(preceded(char_p('('), terminated(atom_expr_p, char_p(')')))),
             parenthesized_atom,
         ),
     )(input)
@@ -304,14 +307,14 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             sp_terminated!(tuple((
                 fn_name_p,
                 preceded(
-                    sp_terminated!(char('(')),
+                    sp_terminated!(char_p('(')),
                     terminated(
                         separated_list1(
                             // separator
-                            sp_preceded!(sp_terminated!(char(','))),
+                            sp_preceded!(sp_terminated!(char_p(','))),
                             atom_expr_p
                         ),
-                        sp_preceded!(char(')'))
+                        sp_preceded!(char_p(')'))
                     )
                 )
             ))),
@@ -322,12 +325,12 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
 
 /// equ : '=' sp
 fn equ_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
-    sp_terminated!(recognize(char('=')))(input)
+    sp_terminated!(recognize(char_p('=')))(input)
 }
 
 /// end : ';' sp
 fn end_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
-    sp_terminated!(recognize(char(';')))(input)
+    sp_terminated!(recognize(char_p(';')))(input)
 }
 
 /// definition : brace_def | fn_def | k_def
@@ -369,9 +372,9 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                     map(satisfy(|c| c == 'n'), |_| NonAssociative),
                 )))),
                 def_p,
-                sp_terminated!(char('{')),
+                sp_terminated!(char_p('{')),
                 property_list_p,
-                sp_terminated!(char('}')),
+                sp_terminated!(char_p('}')),
             )),
             |(operator, op_ass, _, _, properties, _)| BraceGroup {
                 operator: match op_ass {
@@ -397,7 +400,10 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 fn_name_p,
                 def_p,
-                separated_list1(sp_terminated!(sp_preceded!(char(','))), simple_atom_expr_p),
+                separated_list1(
+                    sp_terminated!(sp_preceded!(char_p(','))),
+                    simple_atom_expr_p,
+                ),
                 fn_def_symbol_p,
                 atom_expr_p,
                 end_p,
@@ -420,11 +426,11 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
         "K def",
         map(
             tuple((
-                sp_terminated!(char('K')),
+                sp_terminated!(char_p('K')),
                 def_p,
                 alt((
-                    tuple((opt(value(true, char('?'))), map(k_group_p, Some))),
-                    value((Some(true), Some(('K', 1))), char('?')),
+                    tuple((opt(value(true, char_p('?'))), map(k_group_p, Some))),
+                    value((Some(true), Some(('K', 1))), char_p('?')),
                 )),
                 end_p,
             )),
@@ -650,26 +656,38 @@ pub fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
 pub fn split_algebraic_objects(
     alg_objects: Vec<AlgebraicObject>,
 ) -> (
-    Vec<AlgebraicProperty>,
-    Vec<AlgebraicFunction>,
-    Vec<KProperty>,
-    Vec<Operator>,
+    HashSet<AlgebraicProperty>,
+    HashSet<AlgebraicFunction>,
+    HashSet<KProperty>,
+    AssociativityHashMap,
 ) {
-    let mut properties: Vec<AlgebraicProperty> = Vec::new();
-    let mut functions: Vec<AlgebraicFunction> = Vec::new();
-    let mut k_properties: Vec<KProperty> = Vec::new();
-    let mut operators: Vec<Operator> = Vec::new();
+    let mut properties: HashSet<AlgebraicProperty> = HashSet::new();
+    let mut functions: HashSet<AlgebraicFunction> = HashSet::new();
+    let mut k_properties: HashSet<KProperty> = HashSet::new();
+    let mut operators: AssociativityHashMap = HashMap::new();
     for obj in alg_objects {
         match obj {
-            AlgebraicObject::KProperty(kp) => k_properties.push(kp),
+            AlgebraicObject::KProperty(kp) => {
+                k_properties.insert(kp);
+                ()
+            }
             AlgebraicObject::PropertyGroup(bg) => {
                 properties.extend(bg.properties);
-                if bg.operator.op != '_' {
-                    operators.push(bg.operator);
+                if bg.operator.op != '_' && bg.operator.associativity != Unknown {
+                    match operators.insert(bg.operator.op, bg.operator.associativity) {
+                        Some(ass) if ass != bg.operator.associativity => panic!(
+                            "Two different associativities of operator {}: {} (old) and {} (new)",
+                            bg.operator.op, ass, bg.operator.associativity
+                        ),
+                        _ => (),
+                    }
                 }
             }
-            AlgebraicObject::Function(f) => functions.push(f),
-        }
+            AlgebraicObject::Function(f) => {
+                functions.insert(f);
+                ()
+            }
+        };
     }
     (properties, functions, k_properties, operators)
 }
