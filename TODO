@@ -8,5 +8,7 @@ Todo List :
 - re-implement generators using a two-argument function
 - atom values can be more than one char long
 - operator associativity (left/right/none)
+- remove duplicates of algebraic objects when adding to context
+- dress-up and strip-naked across function calls too
 
 Urgent Fix List :

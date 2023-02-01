@@ -1,14 +1,18 @@
+use crate::parser::OperatorAssociativity::{NonAssociative, Unknown};
 #[cfg(test)]
 use crate::parser::*;
 
 #[test]
 fn test_brace_def_p() {
     assert_eq!(
-        brace_def_p::<ApsParserKind>("+ :: { A = A ; B = C ; } "),
+        brace_def_p::<ApsParserKind>("+ n :: { A = A ; B = C ; } "),
         Ok((
             "",
             BraceGroup {
-                operator: Operator { op: '+' },
+                operator: Operator {
+                    op: '+',
+                    associativity: NonAssociative
+                },
                 properties: vec![
                     AlgebraicProperty {
                         atom_expr_left: AtomExpr {
@@ -50,7 +54,10 @@ fn test_fn_def_p() {
                 },],
                 atom_expr_right: AtomExpr {
                     atoms: vec![Atom::Value("A".to_string(),), Atom::Special(2,),],
-                    operator: Some(Operator { op: '^' }),
+                    operator: Some(Operator {
+                        op: '^',
+                        associativity: Unknown
+                    }),
                 },
             },
         ),)
@@ -82,7 +89,10 @@ fn test_fn_call_p() {
                 "exp".to_string(),
                 vec![AtomExpr {
                     atoms: vec![Atom::Value("A".to_string(),), Atom::Special(2,),],
-                    operator: Some(Operator { op: '^' }),
+                    operator: Some(Operator {
+                        op: '^',
+                        associativity: Unknown
+                    }),
                 },],
             ))
         ))

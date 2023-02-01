@@ -1,9 +1,10 @@
 // APS Lang Parser
 
-use std::fmt::write;
-use std::{boxed::Box, fmt};
+use std::fmt;
 
-use crate::parser::OperatorAssociativity::LeftAssociative;
+use crate::parser::OperatorAssociativity::{
+    LeftAssociative, NonAssociative, RightAssociative, Unknown,
+};
 use nom::multi::separated_list1;
 use nom::{
     branch::alt,
@@ -25,7 +26,6 @@ pub enum Atom {
     Value(String),
     Special(i32),
     FunctionCall((String, Vec<AtomExpr>)),
-    Generator(GeneratorExpr),
 }
 
 impl PartialEq for Atom {
@@ -34,7 +34,6 @@ impl PartialEq for Atom {
             (Self::Parenthesized(expr_a), Self::Parenthesized(expr_b)) => expr_a == expr_b,
             (Self::Value(val_a), Self::Value(val_b)) => val_a == val_b,
             (Self::Special(spe_a), Self::Special(spe_b)) => spe_a == spe_b,
-            (Self::Generator(a), Self::Generator(b)) => a == b,
             (Self::FunctionCall(fn_call_a), Self::FunctionCall(fn_call_b)) => {
                 fn_call_a == fn_call_b
             }
@@ -60,7 +59,6 @@ impl fmt::Display for Atom {
                 }
                 write!(f, ")")
             }
-            Atom::Generator(x) => write!(f, "{}", x),
         }
     }
 }
@@ -72,7 +70,7 @@ pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
     Atom::Parenthesized(expr)
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, Clone, Hash, Eq)]
 pub struct Operator {
     pub op: char,
     pub associativity: OperatorAssociativity,
@@ -84,24 +82,33 @@ impl fmt::Display for Operator {
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+impl PartialEq for Operator {
+    fn eq(&self, other: &Self) -> bool {
+        self.op == other.op
+    }
+    fn ne(&self, other: &Self) -> bool {
+        !(self == other)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum OperatorAssociativity {
+    Unknown,
     LeftAssociative,
     RightAssociative,
     NonAssociative,
 }
 
-static DEFAULT_OPERATOR_ASSOCIATIVITY: OperatorAssociativity = LeftAssociative;
-
 impl fmt::Display for OperatorAssociativity {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}-associative",
+            "{}",
             match self {
-                LeftAssociative => "left",
-                OperatorAssociativity::RightAssociative => "right",
-                OperatorAssociativity::NonAssociative => "non",
+                Unknown => "default",
+                LeftAssociative => "left-associative",
+                RightAssociative => "right-associative",
+                NonAssociative => "non-associative",
             }
         )
     }
@@ -141,37 +148,6 @@ impl fmt::Display for AtomExpr {
             write!(f, " {} {}", operator_str, atom)?;
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub enum GeneratorElement {
-    GenOperator(Operator),
-    GenAtom(Atom),
-}
-
-impl fmt::Display for GeneratorElement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GeneratorElement::GenOperator(x) => write!(f, "{}", x),
-            GeneratorElement::GenAtom(x) => write!(f, "{}", x),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
-pub struct GeneratorExpr {
-    pub elements: Vec<GeneratorElement>,
-    pub iterator: Box<Atom>,
-}
-
-impl fmt::Display for GeneratorExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "$ ")?;
-        for element in &self.elements {
-            write!(f, "{} ", element)?;
-        }
-        write!(f, "$ # {}", self.iterator)
     }
 }
 
@@ -265,7 +241,7 @@ fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str,
 fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
     map(sp_terminated!(one_of("+-*/@^")), |op_c| Operator {
         op: op_c,
-        associativity: DEFAULT_OPERATOR_ASSOCIATIVITY,
+        associativity: Unknown,
     })(input)
 }
 
@@ -342,39 +318,6 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// generator_expr : '$' sp (op | atom)+ '$' sp '#' sp (atom_symbol | special_symbol)
-pub fn generator_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
-    input: &'i str,
-) -> IResult<&'i str, Atom, E> {
-    context(
-        "generator expr",
-        map(
-            tuple((
-                preceded(
-                    sp_terminated!(char('$')),
-                    many1(alt((
-                        map(op_p, GeneratorElement::GenOperator),
-                        map(atom_p, GeneratorElement::GenAtom),
-                    ))),
-                ),
-                preceded(
-                    sp_terminated!(char('$')),
-                    preceded(
-                        sp_terminated!(char('#')),
-                        alt((atom_symbol_p, special_symbol_p)),
-                    ),
-                ),
-            )),
-            |(elements, iterator)| -> Atom {
-                Atom::Generator(GeneratorExpr {
-                    elements,
-                    iterator: Box::new(iterator),
-                })
-            },
-        ),
-    )(input)
-}
-
 /// equ : '=' sp
 fn equ_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     sp_terminated!(recognize(char('=')))(input)
@@ -402,7 +345,7 @@ fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// brace_def : (op | _ sp) def '{' sp property_list '}' sp
+/// brace_def : (op | _ sp) (('l' | 'r' | 'n') sp)? def '{' sp property_list '}' sp
 pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, BraceGroup, E> {
@@ -412,15 +355,29 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 alt((
                     op_p,
-                    sp_terminated!(map(satisfy(|c| c == '_'), |op| Operator { op })),
+                    sp_terminated!(map(satisfy(|c| c == '_'), |op| Operator {
+                        op,
+                        associativity: Unknown,
+                    })),
                 )),
+                opt(sp_terminated!(alt((
+                    map(satisfy(|c| c == 'l'), |_| LeftAssociative),
+                    map(satisfy(|c| c == 'r'), |_| RightAssociative),
+                    map(satisfy(|c| c == 'n'), |_| NonAssociative),
+                )))),
                 def_p,
                 sp_terminated!(char('{')),
                 property_list_p,
                 sp_terminated!(char('}')),
             )),
-            |(operator, _, _, properties, _)| BraceGroup {
-                operator,
+            |(operator, op_ass, _, _, properties, _)| BraceGroup {
+                operator: match op_ass {
+                    Some(associativity) if operator.op != '_' => Operator {
+                        op: operator.op,
+                        associativity,
+                    },
+                    _ => operator,
+                },
                 properties,
             },
         ),
@@ -557,42 +514,20 @@ fn big_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// atom_expr_start : (atom op) | generator_expr_start
+/// atom_expr_start : (atom op)
+/// OLD: atom_expr_start : (atom op) | generator_expr_start
 fn atom_expr_start_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, (Atom, Operator), E> {
-    context(
-        "atom expr start",
-        alt((
-            tuple((atom_p, op_p)),
-            map(
-                generator_expr_p, // TODO: only end-generators please
-                |atom| match atom {
-                    Atom::Generator(_) => (atom, Operator { op: '{' }),
-                    _ => panic!("generator_expr_p didn't return a generator expression"),
-                },
-            ),
-        )),
-    )(input)
+    context("atom expr start", tuple((atom_p, op_p)))(input)
 }
 
-/// atom_expr_end : (op atom) | generator_expr_end
+/// atom_expr_end : (op atom)
+/// OLD: atom_expr_end : (op atom) | generator_expr_end
 fn atom_expr_end_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, (Operator, Atom), E> {
-    context(
-        "atom expr end",
-        alt((
-            tuple((op_p, atom_p)),
-            map(
-                generator_expr_p, // TODO: only end-generators please
-                |atom| match atom {
-                    Atom::Generator(_) => (Operator { op: '}' }, atom),
-                    _ => panic!("generator_expr_p didn't return a generator expression"),
-                },
-            ),
-        )),
-    )(input)
+    context("atom expr end", tuple((op_p, atom_p)))(input)
 }
 
 /// atom_expr : big_atom (op big_atom)*
@@ -708,22 +643,30 @@ pub fn root<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     context("all", many0(sp_preceded!(definition_p)))(input)
 }
 
+/* Additional functions on AlgebraicObjects */
 pub fn split_algebraic_objects(
     alg_objects: Vec<AlgebraicObject>,
 ) -> (
     Vec<AlgebraicProperty>,
     Vec<AlgebraicFunction>,
     Vec<KProperty>,
+    Vec<Operator>,
 ) {
     let mut properties: Vec<AlgebraicProperty> = Vec::new();
     let mut functions: Vec<AlgebraicFunction> = Vec::new();
     let mut k_properties: Vec<KProperty> = Vec::new();
+    let mut operators: Vec<Operator> = Vec::new();
     for obj in alg_objects {
         match obj {
             AlgebraicObject::KProperty(kp) => k_properties.push(kp),
-            AlgebraicObject::PropertyGroup(bg) => properties.extend(bg.properties),
+            AlgebraicObject::PropertyGroup(bg) => {
+                properties.extend(bg.properties);
+                if bg.operator.op != '_' {
+                    operators.push(bg.operator);
+                }
+            }
             AlgebraicObject::Function(f) => functions.push(f),
         }
     }
-    (properties, functions, k_properties)
+    (properties, functions, k_properties, operators)
 }

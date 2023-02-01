@@ -5,7 +5,7 @@ use crate::{
     explorer::{atom2atom_expr, explore_graph, init_graph, print_graph_dot_format},
     parser::{
         self, split_algebraic_objects, AlgebraicFunction, AlgebraicProperty, Atom, AtomExpr,
-        KProperty,
+        KProperty, Operator,
     },
     preprocessor::read_and_preprocess_file,
     solution::solve_equality,
@@ -23,6 +23,7 @@ pub struct ReplContext {
     pub properties: Vec<AlgebraicProperty>,
     pub functions: Vec<AlgebraicFunction>,
     pub k_properties: Vec<KProperty>,
+    pub operators: Vec<Operator>,
     pub pretty_print_steps: bool,
     pub auto_break: bool,
 }
@@ -32,6 +33,7 @@ pub fn init_context() -> ReplContext {
         properties: Vec::new(),
         functions: Vec::new(),
         k_properties: Vec::new(),
+        operators: Vec::new(),
         pretty_print_steps: true,
         auto_break: true,
     }
@@ -41,6 +43,7 @@ fn reset_context(context: &mut ReplContext) {
     context.properties.clear();
     context.functions.clear();
     context.k_properties.clear();
+    context.operators.clear();
     context.pretty_print_steps = true;
     context.auto_break = true;
 }
@@ -167,6 +170,13 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
             content.push_str(&format!(" | {}\n", k_property));
         }
     }
+    if !context.operators.is_empty() {
+        // k properties
+        content.push_str("\n Operators :\n");
+        for operator in &context.operators {
+            content.push_str(&format!(" | {} ({})\n", operator, operator.associativity));
+        }
+    }
     Ok(Some(content))
 }
 
@@ -196,7 +206,7 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
 
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     let body_str = concat_args(args.get_many("body").unwrap());
-    let (mut properties, mut functions, mut k_properties) =
+    let (mut properties, mut functions, mut k_properties, mut operators) =
         split_algebraic_objects(match parser::root::<parser::ApsParserKind>(&body_str) {
             Ok(("", objects)) => objects,
             Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
@@ -206,6 +216,7 @@ fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<S
     context.properties.append(&mut properties);
     context.functions.append(&mut functions);
     context.k_properties.append(&mut k_properties);
+    context.operators.append(&mut operators);
     Ok(Some(" Added object(s) to context.".to_owned()))
 }
 
@@ -264,6 +275,7 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
         context.properties.clone(),
         context.functions.clone(),
         context.k_properties.clone(),
+        &context.operators,
         &property.atom_expr_left,
         &property.atom_expr_right,
         context.auto_break,
@@ -287,7 +299,7 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
         .map(|(expr, rule, common)| {
             // Stringify expression
             let expr_str = if context.pretty_print_steps {
-                strip_expr_naked(expr).to_string()
+                strip_expr_naked(expr, &context.operators).to_string()
             } else {
                 expr.to_string()
             };
@@ -356,7 +368,8 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
     };
     // split objects
-    let (mut properties, mut functions, mut k_properties) = split_algebraic_objects(alg_objects);
+    let (mut properties, mut functions, mut k_properties, mut operators) =
+        split_algebraic_objects(alg_objects);
     // add functions as properties
     context
         .properties
@@ -371,6 +384,7 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
     context.properties.append(&mut properties);
     context.functions.append(&mut functions);
     context.k_properties.append(&mut k_properties);
+    context.operators.append(&mut operators);
     true
 }
 
