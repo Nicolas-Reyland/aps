@@ -586,7 +586,7 @@ pub fn strip_expr_naked(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr 
     let associativity = get_operator_associativity(&operator, operators);
 
     if associativity == NonAssociative {
-        // only strip all the sub-expressions naked, nothing more
+        // only strip all the sub-expressions naked, do nothing with the current expression
         return map_over_all_sub_expressions(
             &expr.atoms,
             expr.operator.clone(),
@@ -602,7 +602,7 @@ pub fn strip_expr_naked(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr 
     }
 
     // merge the atoms from an atom-expression (isolated) and the current expression
-    // sub-expressions are NOT yet stripped naked themselves
+    // except for the isolated one, sub-expressions are NOT yet stripped naked themselves
     let new_atoms = match if left_ass {
         expr.atoms.split_first()
     } else {
@@ -611,6 +611,8 @@ pub fn strip_expr_naked(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr 
         Some((isolated, rest)) => match isolated.clone() {
             // the isolated atom is an expression, so we should remove the parentheses
             Atom::Parenthesized(mut isolated_expr) if expr.operator == isolated_expr.operator => {
+                // make the isolated expression naked
+                isolated_expr = strip_expr_naked(&isolated_expr, operators);
                 // merge the isolated and rest into new expression
                 let mut isolated_expr_atoms = Vec::new();
                 if left_ass {
@@ -624,7 +626,7 @@ pub fn strip_expr_naked(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr 
                 }
                 isolated_expr_atoms
             }
-            // the isolated atom is not an expression :(
+            // the isolated atom is not an AtomExpr (should not merge it with the others)
             _ => expr.atoms.clone(),
         },
         // wtf ??
@@ -652,7 +654,7 @@ pub fn dress_up_expr(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr {
     let associativity = get_operator_associativity(&operator, operators);
 
     if associativity == NonAssociative {
-        // only dress up all the sub-expressions, nothing more
+        // only dress up the sub-expressions naked, do nothing with the current expression
         return map_over_all_sub_expressions(
             &expr.atoms,
             expr.operator.clone(),
@@ -666,46 +668,38 @@ pub fn dress_up_expr(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr {
     if !left_ass {
         assert_eq!(associativity, RightAssociative);
     }
-    // swap 'split_last' with 'split_first' for right-associative operators
-    match match left_ass {
-        true => expr.atoms.split_last(),
-        false => expr.atoms.split_first(),
+
+    // group all the atoms, except for one (isolated) into a new expression
+    // sub-expressions are NOT yet dressed up themselves, not even the isolated one
+    let new_atoms: Vec<Atom> = match if left_ass {
+        expr.atoms.split_last()
+    } else {
+        expr.atoms.split_first()
     } {
         Some((isolated, rest)) => {
-            let dressed_up_isolated = match isolated {
-                Atom::Parenthesized(sub_expr) => {
-                    Atom::Parenthesized(dress_up_expr(sub_expr, operators))
-                }
-                atom => (*atom).clone(),
-            };
             let num_left = rest.len();
             if num_left == 0 {
-                return atom2atom_expr(dressed_up_isolated);
-            }
-            let dressed_up_rest = if num_left == 1 {
-                rest.first().unwrap().clone()
+                vec![isolated.clone()]
             } else {
-                Atom::Parenthesized(dress_up_expr(
-                    &AtomExpr {
+                let rest_expr = if num_left == 1 {
+                    rest[0].clone()
+                } else {
+                    Atom::Parenthesized(AtomExpr {
                         atoms: rest.to_vec(),
                         operator: operator.clone(),
-                    },
-                    operators,
-                ))
-            };
-            AtomExpr {
-                // swap this vector when handling right-associative
-                atoms: if left_ass {
-                    vec![dressed_up_rest, dressed_up_isolated]
+                    })
+                };
+                if left_ass {
+                    vec![rest_expr, isolated.clone()]
                 } else {
-                    vec![dressed_up_isolated, dressed_up_rest]
-                },
-                operator: operator.clone(),
+                    vec![isolated.clone(), rest_expr]
+                }
             }
         }
         // wtf ??
         None => return (*expr).clone(),
-    }
+    };
+    map_over_all_sub_expressions(&new_atoms, operator, operators, &dress_up_expr)
 }
 
 /// Returns the associativity of the operator, based on the given vector of operators
