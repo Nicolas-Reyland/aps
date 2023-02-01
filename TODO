@@ -1,6 +1,5 @@
 Todo List :
 - optimize everything
-- memoization
 - write new parsing tests
 - only iterate over  graph "outer layer" (doesn't seem to work somehow)
 - re-implement generators somehow
