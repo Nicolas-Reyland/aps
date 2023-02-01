@@ -52,24 +52,24 @@ macro_rules! handle_setting {
             "on" => {
                 $switch_var = true;
                 Ok(Some(format!(" Activated {}.", $param)))
-            },
+            }
             "off" => {
                 $switch_var = false;
                 Ok(Some(format!(" Deactivated {}.", $param)))
-            },
-            "show" => {
-                Ok(Some(format!(
-                    " {} {}",
-                    $param,
-                    match $switch_var {
-                        true => "is activated",
-                        false => "is not activated",
-                    },
-                )))
-            },
-            _ => Ok(Some(" usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string()))
+            }
+            "show" => Ok(Some(format!(
+                " {} {}",
+                $param,
+                match $switch_var {
+                    true => "is activated",
+                    false => "is not activated",
+                },
+            ))),
+            _ => Ok(Some(
+                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+            )),
         }
-    }
+    };
 }
 
 pub fn repl(context: ReplContext) {
@@ -175,7 +175,7 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         Some(x) => x.as_str(),
         None => {
             return Ok(Some(
-                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string()
+                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
             ))
         }
     };
@@ -190,7 +190,7 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
             return Ok(Some(
                 " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
             ))
-        },
+        }
     }
 }
 
@@ -363,7 +363,7 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
         .extend(functions.iter().map(|function| AlgebraicProperty {
             atom_expr_left: atom2atom_expr(Atom::FunctionCall((
                 function.name.clone(),
-                function.atom_expr_left.clone(),
+                function.atom_expr_args.clone(),
             ))),
             atom_expr_right: function.atom_expr_right.clone(),
         }));

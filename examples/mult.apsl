@@ -1,0 +1,10 @@
+* :: {
+    // Commutativity
+    A * B = B * A ;
+    // Associativity
+    (A * B) * C = A * (B * C) ;
+    // Identity element
+    A * 1 = A ;
+    // Null element
+    A * 0 = 0 ;
+}

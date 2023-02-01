@@ -9,6 +9,6 @@ Todo List :
 - special values can hbe more than 9 ([0-9]+)
 - atom values can be more than one char long
 - fixed number of worker threads instead of one thread per match
-- implement functions
+- implement functions with multiple arguments
 
 Urgent Fix List :

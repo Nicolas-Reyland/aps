@@ -20,9 +20,7 @@ fn test_expr_stripping() {
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
     };
-    println!("expr_a = {}", expr_a);
     println!("strip(expr_a) = {}", strip_expr_naked(&expr_a));
-    println!("expr_b = {}", expr_b);
     println!("strip(expr_b) = {}", strip_expr_naked(&expr_b));
 }
 
@@ -60,21 +58,20 @@ fn test_some_things() {
         ),
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
     };
-    let property =
-        match root::<ApsParserKind>("+ :: { (A + B) + C = A + (B + C) ; }") {
-            Ok(("", parsed)) => match parsed.first().unwrap() {
-                AlgebraicObject::PropertyGroup(BraceGroup {
-                                                           properties,
-                                                           operator: _,
-                                                       }) => properties.first().unwrap().clone(),
-                _ => panic!("No a brace group:\n{:#?}\n", parsed),
-            },
-            Ok((rest, parsed)) => panic!(
-                "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-                rest, parsed
-            ),
-            Err(err) => panic!("Failed to parse property:\n{:#?}", err),
-        };
+    let property = match root::<ApsParserKind>("+ :: { (A + B) + C = A + (B + C) ; }") {
+        Ok(("", parsed)) => match parsed.first().unwrap() {
+            AlgebraicObject::PropertyGroup(BraceGroup {
+                properties,
+                operator: _,
+            }) => properties.first().unwrap().clone(),
+            _ => panic!("No a brace group:\n{:#?}\n", parsed),
+        },
+        Ok((rest, parsed)) => panic!(
+            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
+            rest, parsed
+        ),
+        Err(err) => panic!("Failed to parse property:\n{:#?}", err),
+    };
     let new_expressions = apply_property(&src_expr, &property, &vec![]);
     println!("New Expressions :\n{:#?}\n", new_expressions);
 }

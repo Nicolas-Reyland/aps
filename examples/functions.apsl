@@ -1,0 +1,13 @@
+// Functions
+
+add :: A, B -> A + B ;
+double :: A -> 2 * A ;
+inc :: A -> A + 1 ;
+
+square :: A -> A ^ 2 ;
+sqrt :: A ^ 2 -> A ;
+
+_ :: {
+    sqrt(A) ^ B = sqrt(A ^ B) ;
+    square(A) ^ B = square(A ^ B) ;
+}
