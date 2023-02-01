@@ -3,7 +3,7 @@
 use std::fmt;
 
 use crate::parser::OperatorAssociativity::{
-    LeftAssociative, NonAssociative, RightAssociative, Unknown,
+    LeftAssociative, LeftRightAssociative, NonAssociative, RightAssociative, Unknown,
 };
 use nom::multi::separated_list1;
 use nom::{
@@ -96,6 +96,7 @@ pub enum OperatorAssociativity {
     Unknown,
     LeftAssociative,
     RightAssociative,
+    LeftRightAssociative,
     NonAssociative,
 }
 
@@ -108,6 +109,7 @@ impl fmt::Display for OperatorAssociativity {
                 Unknown => "default",
                 LeftAssociative => "left-associative",
                 RightAssociative => "right-associative",
+                LeftRightAssociative => "left-right-associative",
                 NonAssociative => "non-associative",
             }
         )
@@ -237,9 +239,9 @@ fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str,
     take_while(move |c| chars.contains(c))(input)
 }
 
-/// op : [+-*/@^] sp
+/// op : [+-*/@^$%] sp
 fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
-    map(sp_terminated!(one_of("+-*/@^")), |op_c| Operator {
+    map(sp_terminated!(one_of("+-*/@^$%")), |op_c| Operator {
         op: op_c,
         associativity: Unknown,
     })(input)
@@ -345,7 +347,7 @@ fn definition_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// brace_def : (op | _ sp) (('l' | 'r' | 'n') sp)? def '{' sp property_list '}' sp
+/// brace_def : (op | _ sp) (('l' | 'r' | 'n' | ("lr" | "rl")) sp)? def '{' sp property_list '}' sp
 pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, BraceGroup, E> {
@@ -361,6 +363,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                     })),
                 )),
                 opt(sp_terminated!(alt((
+                    map(alt((tag("lr"), tag("rl"),)), |_| LeftRightAssociative,),
                     map(satisfy(|c| c == 'l'), |_| LeftAssociative),
                     map(satisfy(|c| c == 'r'), |_| RightAssociative),
                     map(satisfy(|c| c == 'n'), |_| NonAssociative),

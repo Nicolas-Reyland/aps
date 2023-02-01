@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::parser::OperatorAssociativity::{
-    LeftAssociative, NonAssociative, RightAssociative, Unknown,
+    LeftAssociative, LeftRightAssociative, NonAssociative, RightAssociative, Unknown,
 };
 use crate::parser::{
     parenthesized_atom, AlgebraicFunction, AlgebraicProperty, Atom, AtomExpr, Operator,
@@ -594,6 +594,9 @@ pub fn strip_expr_naked(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr 
             &strip_expr_naked,
         );
     }
+    if associativity == LeftRightAssociative {
+        return strip_expr_naked_left_right(expr, operators);
+    }
 
     let left_ass = associativity == LeftAssociative;
     // TODO: remove this later on
@@ -635,6 +638,32 @@ pub fn strip_expr_naked(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr 
     map_over_all_sub_expressions(&new_atoms, operator, operators, &strip_expr_naked)
 }
 
+fn strip_expr_naked_left_right(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr {
+    let mut new_atoms: Vec<Atom> = Vec::with_capacity(expr.atoms.len());
+    for atom in expr.atoms.clone() {
+        match atom.clone() {
+            Atom::Parenthesized(atom_expr) => {
+                if atom_expr.operator == expr.operator {
+                    // merge this expression
+                    let mut new_atom_expr = strip_expr_naked_left_right(&atom_expr, operators);
+                    new_atoms.append(&mut new_atom_expr.atoms);
+                } else {
+                    // add it as-is (not to be merged)
+                    new_atoms.push(atom);
+                }
+            }
+            _ => new_atoms.push(atom),
+        }
+    }
+
+    map_over_all_sub_expressions(
+        &new_atoms,
+        expr.operator.clone(),
+        operators,
+        &strip_expr_naked,
+    )
+}
+
 /// Dresses the expression up.
 /// Adds parentheses for easier and faster property matching.
 /// Operator associativity (left, right, none) is taken into account.
@@ -651,7 +680,12 @@ pub fn dress_up_expr(expr: &AtomExpr, operators: &Vec<Operator>) -> AtomExpr {
     // left-associative operator case (default)
     let operator = expr.operator.clone();
     // "A + B + C + D" => "(A + B + C) + D" => "((A + B) + C) + D"
-    let associativity = get_operator_associativity(&operator, operators);
+    let associativity = match get_operator_associativity(&operator, operators) {
+        // It is both left and right associative, so we know that :
+        // A + B + C = A + (B + C) = (A + B) + C
+        LeftRightAssociative => LeftRightAssociative,
+        ass => ass,
+    };
 
     if associativity == NonAssociative {
         // only dress up the sub-expressions naked, do nothing with the current expression
@@ -737,11 +771,7 @@ fn map_over_all_sub_expressions(
                 Atom::FunctionCall((fn_name, args)) => Atom::FunctionCall((
                     fn_name.to_string(),
                     // map each argument with f
-                    args.iter()
-                        .map(|arg_expr| {
-                            f(arg_expr, operators)
-                        })
-                        .collect(),
+                    args.iter().map(|arg_expr| f(arg_expr, operators)).collect(),
                 )),
                 _ => (*atom).clone(),
             })

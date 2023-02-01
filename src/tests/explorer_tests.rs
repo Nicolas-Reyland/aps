@@ -18,6 +18,10 @@ fn default_operators() -> Vec<Operator> {
             associativity: RightAssociative,
         },
         Operator {
+            op: '@',
+            associativity: LeftRightAssociative,
+        },
+        Operator {
             op: '-',
             associativity: NonAssociative,
         },
@@ -83,6 +87,13 @@ fn test_expr_stripping() {
     assert_eq_cloth!(
         "A ^ (B ^ (C ^ D))",
         "A ^ B ^ C ^ D",
+        strip_expr_naked,
+        &default_operators()
+    );
+    // Left-Right-Associative
+    assert_eq_cloth!(
+        "A @ ((B @ C) @ D) @ E",
+        "A @ B @ C @ D @ E",
         strip_expr_naked,
         &default_operators()
     );
