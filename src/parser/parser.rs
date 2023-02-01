@@ -2,6 +2,7 @@
 
 use std::{boxed::Box, fmt};
 
+use nom::multi::separated_list1;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
@@ -18,9 +19,9 @@ pub type ApsParserKind<'i> = (&'i str, ErrorKind);
 #[derive(Debug, Clone, Hash, Eq)]
 pub enum Atom {
     Parenthesized(AtomExpr),
-    Value(char),
-    Special(char),
-    FunctionCall((String, AtomExpr)),
+    Value(String),
+    Special(i32),
+    FunctionCall((String, Vec<AtomExpr>)),
     Generator(GeneratorExpr),
 }
 
@@ -49,7 +50,13 @@ impl fmt::Display for Atom {
             Atom::Parenthesized(x) => write!(f, "({})", x),
             Atom::Value(x) => write!(f, "{}", x),
             Atom::Special(x) => write!(f, "{}", x),
-            Atom::FunctionCall((name, x)) => write!(f, "{}({})", name, x),
+            Atom::FunctionCall((name, args)) => {
+                write!(f, "{}({}", name, args.first().unwrap())?;
+                for arg in args.iter().skip(1) {
+                    write!(f, ", {}", arg)?;
+                }
+                write!(f, ")")
+            },
             Atom::Generator(x) => write!(f, "{}", x),
         }
     }
@@ -163,7 +170,7 @@ impl fmt::Display for AlgebraicProperty {
 #[derive(Debug, PartialEq, Clone)]
 pub struct AlgebraicFunction {
     pub name: String,
-    pub atom_expr_left: AtomExpr,
+    pub atom_expr_args: Vec<AtomExpr>,
     pub atom_expr_right: AtomExpr,
 }
 
@@ -171,9 +178,14 @@ impl fmt::Display for AlgebraicFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} :: {} -> {}",
-            self.name, self.atom_expr_left, self.atom_expr_right
-        )
+            "{} :: {}",
+            self.name,
+            self.atom_expr_args.first().unwrap()
+        )?;
+        for left_expr in self.atom_expr_args.iter().skip(1) {
+            write!(f, ", {}", left_expr)?;
+        }
+        write!(f, " -> {}", self.atom_expr_right)
     }
 }
 
@@ -248,15 +260,15 @@ fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i st
 fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     sp_terminated!(map(
         satisfy(|c| c.is_alphabetic() && c.is_uppercase()),
-        Atom::Value
+        |c| Atom::Value(String::from(c))
     ))(input)
 }
 
-/// special_symbol : [0-9] sp
+/// special_symbol : [0-9]+ sp
 fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
-        sp_terminated!(satisfy(|c: char| c.is_numeric())),
-        Atom::Special,
+        sp_terminated!(many1(map(satisfy(|c: char| c.is_numeric()), |c: char| c))),
+        |s| Atom::Special(s.into_iter().collect::<String>().parse().unwrap()),
     )(input)
 }
 
@@ -273,7 +285,7 @@ fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// fn_call_p : fn_name '(' atom_expr ')' sp
+/// fn_call_p : fn_name '(' sp atom_expr (sp ',' sp atom_expr)* sp ')' sp
 pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
@@ -282,9 +294,19 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
         map(
             sp_terminated!(tuple((
                 fn_name_p,
-                preceded(char('('), terminated(atom_expr_p, char(')')))
+                preceded(
+                    sp_terminated!(char('(')),
+                    terminated(
+                        separated_list1(
+                            // separator
+                            sp_preceded!(sp_terminated!(char(','))),
+                            atom_expr_p
+                        ),
+                        sp_preceded!(char(')'))
+                    )
+                )
             ))),
-            |(fn_name, expr)| Atom::FunctionCall((fn_name.to_string(), expr)),
+            |(fn_name, args)| Atom::FunctionCall((fn_name.to_string(), args)),
         ),
     )(input)
 }
@@ -374,7 +396,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// fn_def : fn_name def simple_atom_expr fn_def atom_expr end
+/// fn_def : fn_name def simple_atom_expr (sp ',' sp simple_atom_expr) fn_def atom_expr end
 pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AlgebraicFunction, E> {
@@ -384,14 +406,14 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 fn_name_p,
                 def_p,
-                simple_atom_expr_p,
+                separated_list1(sp_terminated!(sp_preceded!(char(','))), simple_atom_expr_p),
                 fn_def_symbol_p,
                 atom_expr_p,
                 end_p,
             )),
-            |(name, _, atom_expr_left, _, atom_expr_right, _)| AlgebraicFunction {
+            |(name, _, atom_expr_args, _, atom_expr_right, _)| AlgebraicFunction {
                 name: name.to_owned(),
-                atom_expr_left,
+                atom_expr_args,
                 atom_expr_right,
             },
         ),

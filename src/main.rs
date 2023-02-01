@@ -1,10 +1,12 @@
 /* Parser for Algebraic Proofing System Language */
 
-use repl::{import_into_context /*, solve_equality_str*/, init_context};
+use repl::{import_into_context, solve_equality_str, init_context};
 use std::env;
 
 #[path = "explorer/explorer.rs"]
 pub(crate) mod explorer;
+#[path = "tests/explorer_tests.rs"]
+pub(crate) mod explorer_tests;
 #[path = "parser/parser.rs"]
 pub(crate) mod parser;
 #[path = "tests/parser_tests.rs"]
@@ -13,8 +15,6 @@ pub(crate) mod parser_tests;
 pub(crate) mod preprocessor;
 #[path = "tests/preprocessor_tests.rs"]
 pub(crate) mod preprocessor_tests;
-#[path = "tests/explorer_tests.rs"]
-pub(crate) mod explorer_tests;
 #[path = "repl/repl.rs"]
 mod repl;
 #[path = "explorer/solution.rs"]
@@ -35,7 +35,7 @@ fn main() {
             println!(" failed to import '{}'", filename);
         }
     }
-    // println!("{:?}", solve_equality_str("A + B = B + A ;;".to_string(), &mut context));
+    // println!("{:?}", solve_equality_str("square(sqrt(X)) = X ;;".to_string(), &mut context));
     // start a repl
     repl::repl(context);
 }

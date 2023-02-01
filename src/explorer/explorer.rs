@@ -70,7 +70,7 @@ impl fmt::Display for ExprNode {
     }
 }
 
-type PropertyMapping = HashMap<Atom, Atom>;
+type Atom2AtomHashMap = HashMap<Atom, Atom>;
 
 /// init a expression-graph
 pub fn init_graph(expr: AtomExpr) -> ExprGraph {
@@ -141,7 +141,7 @@ pub fn explore_graph(
     // join all the handles
     for handle in handles {
         let (p_index, node_index, new_expressions) = handle.join().unwrap();
-        let property = &properties[p_index];
+        let property: &AlgebraicProperty = &properties[p_index];
         let node = &graph.nodes[node_index];
         new_nodes.extend(new_expressions.iter().map(|new_expr| {
             (
@@ -244,9 +244,9 @@ pub fn apply_property(
 }
 
 /// try to match the src_expr to the left_expr, then generate a new expression based on right_expr
-/// this returns a vector containing zero (if there is no match) or multiple (there is a match) new experssions
+/// this returns a vector containing zero (if there is no match) or multiple (there is a match) new expressions
 /// this can yield multiple new expressions, because the source expression if checked for matching, but also all
-/// its 'sub-expressions'
+/// its 'sub-expressions' (including arguments of function calls)
 fn match_and_apply(
     src: &AtomExpr,
     left: &AtomExpr,
@@ -264,16 +264,12 @@ fn match_and_apply(
         None => (),
     }
     // recursively call 'atom_expressions_match' on the sub-expressions
-    let num_src_atoms = src.atoms.len();
     for (sub_i, sub) in src
         .atoms
         .iter()
         .enumerate()
         .filter_map(|(atom_i, atom)| match atom {
             Atom::Parenthesized(sub_expr) => Some((atom_i, (*sub_expr).clone())),
-            Atom::FunctionCall(_) if num_src_atoms != 1 => {
-                Some((atom_i, atom2atom_expr((*atom).clone())))
-            }
             _ => None,
         })
     {
@@ -285,8 +281,8 @@ fn match_and_apply(
                     // only the sub changes, compared to the src. no other atoms
                     let mut src_atoms_prefix = src.atoms[..sub_i].to_vec().clone();
                     src_atoms_prefix.push(parenthesized_atom(sub_tr.clone()));
-                    let src_atoms_suffix = src.atoms[sub_i + 1..].to_vec().clone();
-                    src_atoms_prefix.extend(src_atoms_suffix);
+                    let mut src_atoms_suffix = src.atoms[sub_i + 1..].to_vec().clone();
+                    src_atoms_prefix.append(&mut src_atoms_suffix);
                     AtomExpr {
                         atoms: src_atoms_prefix,
                         operator: src.operator.clone(),
@@ -295,15 +291,53 @@ fn match_and_apply(
                 .collect::<Vec<AtomExpr>>(),
         );
     }
-    new_expressions
+
+    // recursively call 'atom_expressions_match' on the function calls
+    for (sub_i, arg_i, sub) in src
+        .atoms
+        .iter()
+        .enumerate()
+        .filter_map(|(atom_i, atom)| match atom {
+            Atom::FunctionCall((_, expr_args)) => Some(
+                expr_args
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(arg_i, arg)| (atom_i, arg_i, arg))
+            ),
+            _ => None,
+        })
+        .flatten()
+    {
+        new_expressions.extend(
+            match_and_apply(&sub, left, right, functions)
+                .iter()
+                .map(|new_arg| {
+                    // reconstruct like that : <everything b4> func(<args b4> (new arg) <args after>) <everything after>
+                    // only the sub changes, compared to the src. no other atoms
+                    let mut new_atoms = src.atoms.clone();
+                    new_atoms[sub_i] = match new_atoms[sub_i].clone() {
+                        Atom::FunctionCall((fn_name, mut fn_args)) => Atom::FunctionCall({
+                            fn_args[arg_i] = (*new_arg).clone();
+                            (fn_name, fn_args)
+                        }),
+                        _ => panic!("Did not find function call at index {}: {:#?}", sub_i, new_atoms[sub_i]),
+                    };
+                    AtomExpr {
+                        atoms: new_atoms,
+                        operator: src.operator.clone(),
+                    }
+                })
+                .collect::<Vec<AtomExpr>>(),
+        );
+    }    new_expressions
 }
 
 fn atom_expressions_match(
     src_expr: &AtomExpr,  // source expression
     dest_expr: &AtomExpr, // expression to match against
-) -> Option<PropertyMapping> {
+) -> Option<Atom2AtomHashMap> {
     // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
-    let mut mappings: PropertyMapping = HashMap::new();
+    let mut mappings: Atom2AtomHashMap = HashMap::new();
     // number of atoms
     let num_src_atoms = src_expr.atoms.len();
     let num_dest_atoms = dest_expr.atoms.len();
@@ -355,19 +389,20 @@ fn atom_expressions_match(
     Some(mappings)
 }
 
-/// Is the atom_a mappable on atom_b ?
+/// Is atom_a mappable on atom_b ?
 ///
-/// e.g. (A + B) mappable on A
+/// e.g. (A + B) is mappable on A
 /// but A is NOT mappable on (A + B)
-/// and (A + B) mappable on (X + Y)
+/// going further, (A + B) is mappable on (X + Y)
 ///
 /// limitation to overcome : the left part of 'A = 1 * A' (just 'A')
 /// is not seen as mappable to anything else than another lone atom.
 /// An expression should be mappable too, e.g. 'A + B = 1 * (A + B)'
 ///
-fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<PropertyMapping>) {
+/// TODO: convert the return type to Result<Option<A...>>, or Option<Option<A...>>
+fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomHashMap>) {
+    // we match the second atom !!
     match atom_b {
-        // we match the second atom !!
         Atom::Parenthesized(par_b) => match atom_a {
             Atom::Parenthesized(par_a) => match atom_expressions_match(par_a, par_b) {
                 Some(par_mappings) => (true, Some(par_mappings)),
@@ -379,22 +414,56 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<PropertyMa
             Atom::Value(_) | Atom::Special(_) | Atom::Parenthesized(_) | Atom::FunctionCall(_) => {
                 (true, None)
             }
-            _ => todo!(),
+            _ => todo!("Unsupported atom type for atom_a: {:?}", atom_a),
         },
         Atom::Special(_) => (atom_a == atom_b, None),
-        Atom::FunctionCall((fn_name_b, fn_expr_b)) => match atom_a {
-            Atom::FunctionCall((fn_name_a, fn_expr_a)) => {
-                if fn_name_b != fn_name_a {
+        Atom::FunctionCall((fn_name_b, fn_expr_args_b)) => match atom_a {
+            // a function call is only mappable to the same function call, with each argument
+            // being mappable to it's alter-atom
+            Atom::FunctionCall((fn_name_a, fn_expr_args_a)) => {
+                // It should be the same function (by name and number of arguments)
+                if fn_name_b != fn_name_a || fn_expr_args_b.len() != fn_expr_args_a.len() {
                     return (false, None);
                 }
-                match atom_expressions_match(fn_expr_a, fn_expr_b) {
-                    Some(fn_mappings) => (true, Some(fn_mappings)),
-                    None => (false, None),
+                // check 'mappability' of each argument
+                let mut fn_mappings: Atom2AtomHashMap = HashMap::new();
+                for (expr_arg_a, expr_arg_b) in fn_expr_args_a.iter().zip(fn_expr_args_b.iter()) {
+                    match atom_expressions_match(expr_arg_a, expr_arg_b) {
+                        Some(arg_mappings) => {
+                            // add all the mappings, but they shouldn't be any collisions
+                            for (arg_key, arg_value) in arg_mappings {
+                                match fn_mappings.insert(arg_key, arg_value.clone()) {
+                                    Some(old_arg_value) => {
+                                        // There has already been an arg_mapping for this argument,
+                                        // but it has a new value this time.
+                                        //
+                                        // Here is an example of such a collision :
+                                        // f :: A, A + B -> 2 * A + 2 * B ;
+                                        // VALID: f(X, X + Y) mappable to f ?
+                                        // INVALID: f(X, (2 * X) + Y) mappable to f ?
+                                        // In the invalid case, (2 * X) and Y are both mappable to A and B,
+                                        // but there is an argument collision, nor (2 * X) and Y are
+                                        // equal to X. This would mappable to f : f(W ^ 2, (W ^ 2) + (2 * Z))
+                                        // in this valid case, the mappings would be as follows :
+                                        // W ^ 2 mapped to A
+                                        // 2 * Z mapped to B
+                                        if old_arg_value != arg_value {
+                                            return (false, None)
+                                        }
+                                    },
+                                    _ => (),
+                                }
+                            }
+                        },
+                        None => return (false, None),
+                    }
                 }
+                // arguments are all mappable
+                (true, Some(fn_mappings))
             }
             _ => (false, None),
         },
-        Atom::Generator(_) => todo!(),
+        _ => todo!("Unsupported atom type for atom_b: {:?}", atom_b),
     }
 }
 
@@ -402,7 +471,7 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<PropertyMa
 /// mappings matches atom-names from the source-expression to the ones in the value-expression (and vice-versa)
 fn generate_new_expression(
     v_expr: &AtomExpr,
-    mappings: &PropertyMapping,
+    mappings: &Atom2AtomHashMap,
     functions: &Vec<AlgebraicFunction>,
 ) -> AtomExpr {
     // init new atoms and operator

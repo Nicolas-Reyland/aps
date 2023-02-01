@@ -1,5 +1,8 @@
 + :: {
-  A + B = B + A ;
-  (A + B) + C = A + (B + C) ;
-  A + B + ... = (A + B) + ... ;
+    // Commutativity
+    A + B = B + A ;
+    // Associativity
+    (A + B) + C = A + (B + C) ;
+    // Identity element
+    A + 0 = A ;
 }

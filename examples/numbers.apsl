@@ -1,26 +1,9 @@
 // Rules of +, - and * on real numbers
 
+#use examples/plus.apsl
+#use examples/mult.apsl
+
 K :: R ;
-
-+ :: {
-    // Commutativity
-    A + B = B + A ;
-    // Associativity
-    (A + B) + C = A + (B + C) ;
-    // Identity element
-    A + 0 = A ;
-}
-
-* :: {
-    // Commutativity
-    A * B = B * A ;
-    // Associativity
-    (A * B) * C = A * (B * C) ;
-    // Identity element
-    A * 1 = A ;
-    // Null element
-    A * 0 = 0 ;
-}
 
 ^ :: {
     // Null element
