@@ -1,11 +1,8 @@
 Todo List :
 - optimize everything
-- different parsers for generators (separate start & end)
-- use more references, less copies of data (for threads etc)
 - memoization
 - write new parsing tests
 - only iterate over  graph "outer layer" (doesn't seem to work somehow)
-- re-implement generators using a two-argument function
+- re-implement generators somehow
 - atom values can be more than one char long
 - remove duplicates of algebraic objects when adding to context
-- maybe add an operator associativity that is both left and right ?
