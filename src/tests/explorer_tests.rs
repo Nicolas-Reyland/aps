@@ -96,6 +96,31 @@ fn test_expr_stripping() {
 }
 
 #[test]
+fn test_expr_fn_call_stripping() {
+    // Most basic test, no edge-cases
+    assert_eq_cloth!(
+        "func((A * B) * C)",
+        "func(A * B * C)",
+        strip_expr_naked,
+        &default_operators()
+    );
+    // Across multiple args
+    assert_eq_cloth!(
+        "(f((A + B) + C, A ^ (B ^ C), A * (B * C)) + F) + G",
+        "f(A + B + C, A ^ B ^ C, A * (B * C)) + F + G",
+        strip_expr_naked,
+        &default_operators()
+    );
+    // Nested function calls
+    assert_eq_cloth!(
+        "f(g(h(0 ^ (2 ^ o(1)))))",
+        "f(g(h(0 ^ 2 ^ o(1))))",
+        strip_expr_naked,
+        &default_operators()
+    );
+}
+
+#[test]
 fn test_expr_dressing_up() {
     // Most basic test, no edge-cases
     assert_eq_cloth!(
@@ -133,6 +158,31 @@ fn test_expr_dressing_up() {
         &default_operators()
     );
     */
+}
+
+#[test]
+fn test_expr_fn_call_dressing_up() {
+    // Most basic test, no edge-cases
+    assert_eq_cloth!(
+        "func(A * B * C)",
+        "func((A * B) * C)",
+        dress_up_expr,
+        &default_operators()
+    );
+    // Across multiple args
+    assert_eq_cloth!(
+        "f(A + B + C, A ^ B ^ C, A * (B * C)) + F + G",
+        "(f((A + B) + C, A ^ (B ^ C), A * (B * C)) + F) + G",
+        dress_up_expr,
+        &default_operators()
+    );
+    // Nested function calls
+    assert_eq_cloth!(
+        "f(g(h(0 ^ 2 ^ o(1))))",
+        "f(g(h(0 ^ (2 ^ o(1)))))",
+        dress_up_expr,
+        &default_operators()
+    );
 }
 
 #[test]
