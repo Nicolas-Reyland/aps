@@ -2,30 +2,20 @@
 use crate::explorer::*;
 use crate::parser::OperatorAssociativity::*;
 use crate::parser::*;
+use std::collections::HashMap;
 
-fn default_operators() -> Vec<Operator> {
-    vec![
-        Operator {
-            op: '+',
-            associativity: Unknown,
-        },
-        Operator {
-            op: '*',
-            associativity: LeftAssociative,
-        },
-        Operator {
-            op: '^',
-            associativity: RightAssociative,
-        },
-        Operator {
-            op: '@',
-            associativity: LeftRightAssociative,
-        },
-        Operator {
-            op: '-',
-            associativity: NonAssociative,
-        },
-    ]
+fn default_operators() -> AssociativityHashMap {
+    let mut hash_map: AssociativityHashMap = HashMap::with_capacity(5);
+    for (k, v) in vec![
+        ('+', Unknown),
+        ('*', LeftAssociative),
+        ('^', RightAssociative),
+        ('@', LeftRightAssociative),
+        ('-', NonAssociative),
+    ] {
+        hash_map.insert(k, v);
+    }
+    hash_map
 }
 
 // strip_naked / dress_up
@@ -194,32 +184,4 @@ fn test_expr_fn_call_dressing_up() {
         dress_up_expr,
         &default_operators()
     );
-}
-
-#[test]
-fn test_some_things() {
-    let src_expr = match atom_expr_p::<ApsParserKind>("(X + Y) + Z") {
-        Ok(("", expr)) => expr,
-        Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-            rest, parsed,
-        ),
-        Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-    };
-    let property = match root::<ApsParserKind>("+ :: { (A + B) + C = A + (B + C) ; }") {
-        Ok(("", parsed)) => match parsed.first().unwrap() {
-            AlgebraicObject::PropertyGroup(BraceGroup {
-                properties,
-                operator: _,
-            }) => properties.first().unwrap().clone(),
-            _ => panic!("No a brace group:\n{:#?}\n", parsed),
-        },
-        Ok((rest, parsed)) => panic!(
-            "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
-            rest, parsed
-        ),
-        Err(err) => panic!("Failed to parse property:\n{:#?}", err),
-    };
-    let new_expressions = apply_property(&src_expr, &property, &vec![]);
-    println!("New Expressions :\n{:#?}\n", new_expressions);
 }

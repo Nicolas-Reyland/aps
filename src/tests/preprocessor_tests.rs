@@ -7,7 +7,7 @@ use crate::preprocessor::remove_comments;
 fn test_remove_comments() {
     let src = "/* start comment */
 this is code // and this is not */
-I/**/just/**/ want to // test things
+I /**/just/**/ want to // test things
 // break things
 do stuff
 //

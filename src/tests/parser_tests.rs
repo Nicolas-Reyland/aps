@@ -11,8 +11,8 @@ fn test_brace_def_p() {
             BraceGroup {
                 operator: Operator {
                     op: '+',
-                    associativity: NonAssociative
                 },
+                associativity: Some(NonAssociative),
                 properties: vec![
                     AlgebraicProperty {
                         atom_expr_left: AtomExpr {
@@ -56,7 +56,6 @@ fn test_fn_def_p() {
                     atoms: vec![Atom::Value("A".to_string(),), Atom::Special(2,),],
                     operator: Some(Operator {
                         op: '^',
-                        associativity: Unknown
                     }),
                 },
             },
@@ -91,7 +90,6 @@ fn test_fn_call_p() {
                     atoms: vec![Atom::Value("A".to_string(),), Atom::Special(2,),],
                     operator: Some(Operator {
                         op: '^',
-                        associativity: Unknown
                     }),
                 },],
             ))
