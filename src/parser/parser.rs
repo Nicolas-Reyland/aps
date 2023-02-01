@@ -140,12 +140,12 @@ impl PartialEq for AtomExpr {
 impl fmt::Display for AtomExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.atoms[0])?;
-        let operator_str = match &self.operator {
+        let operator_char = match &self.operator {
             Some(operator) => operator.op,
             None => '?',
         };
         for atom in self.atoms.iter().skip(1) {
-            write!(f, " {} {}", operator_str, atom)?;
+            write!(f, " {} {}", operator_char, atom)?;
         }
         Ok(())
     }

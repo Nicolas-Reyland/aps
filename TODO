@@ -10,5 +10,6 @@ Todo List :
 - operator associativity (left/right/none)
 - remove duplicates of algebraic objects when adding to context
 - dress-up and strip-naked across function calls too
+- maybe add an operator associativity that is both left and right ?
 
 Urgent Fix List :

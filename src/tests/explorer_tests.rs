@@ -3,273 +3,134 @@ use crate::explorer::*;
 use crate::parser::OperatorAssociativity::*;
 use crate::parser::*;
 
+fn default_operators() -> Vec<Operator> {
+    vec![
+        Operator {
+            op: '+',
+            associativity: Unknown,
+        },
+        Operator {
+            op: '*',
+            associativity: LeftAssociative,
+        },
+        Operator {
+            op: '^',
+            associativity: RightAssociative,
+        },
+        Operator {
+            op: '-',
+            associativity: NonAssociative,
+        },
+    ]
+}
+
 // strip_naked / dress_up
 macro_rules! assert_eq_cloth {
-    ($expression:expr, $expected:expr, $f:ident, $operators:expr) => {
-        let source_expr = match atom_expr_p::<ApsParserKind>($expression) {
+    ($src_expression:expr, $dst_expression:expr, $f:ident, $operators:expr) => {
+        let source_expr = match atom_expr_p::<ApsParserKind>($src_expression) {
             Ok(("", expr)) => expr,
             Ok((rest, parsed)) => panic!(
-                "Failed to parse everything:\n'{}'\nParsed :\n{:#?}\n",
+                "Failed to parse source:\n'{}'\nParsed :\n{:#?}\n",
+                rest, parsed,
+            ),
+            Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
+        };
+        let destination_expr = match atom_expr_p::<ApsParserKind>($dst_expression) {
+            Ok(("", expr)) => expr,
+            Ok((rest, parsed)) => panic!(
+                "Failed to parse destination:\n'{}'\nParsed :\n{:#?}\n",
                 rest, parsed,
             ),
             Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
         };
         let actual_expr = $f(&source_expr, $operators);
-        let expected_expr = $expected;
         assert_eq!(
             actual_expr,
-            expected_expr,
-            "Assertion of cloth equality failed: {}(\"{}\").\nLeft (actual): {:#?}\nRight (expected): {:#?}",
+            destination_expr,
+            "Assertion of cloth equality failed: {}(\"{}\") != \"{}\".\nLeft (actual): {}\nRight (expected): {}",
             stringify!($f),
-            $expression,
+            $src_expression,
+            $dst_expression,
             actual_expr,
-            expected_expr
+            destination_expr
         );
     };
 }
 
 #[test]
 fn test_expr_stripping() {
-    let operators: Vec<Operator> = vec![
-        Operator {
-            op: '+',
-            associativity: Unknown,
-        },
-        Operator {
-            op: '*',
-            associativity: LeftAssociative,
-        },
-        Operator {
-            op: '^',
-            associativity: RightAssociative,
-        },
-    ];
     assert_eq_cloth!(
         "(A + B) + C",
-        AtomExpr {
-            atoms: vec![
-                Atom::Value("A".to_string()),
-                Atom::Value("B".to_string()),
-                Atom::Value("C".to_string()),
-            ],
-            operator: Some(Operator {
-                op: '+',
-                associativity: Unknown
-            }),
-        },
+        "A + B + C",
         strip_expr_naked,
-        &operators
+        &default_operators()
     );
     // Most basic test, no edge-cases
     assert_eq_cloth!(
         "((A + B) + C) + D",
-        AtomExpr {
-            atoms: vec![
-                Atom::Value("A".to_string()),
-                Atom::Value("B".to_string()),
-                Atom::Value("C".to_string()),
-                Atom::Value("D".to_string()),
-            ],
-            operator: Some(Operator {
-                op: '+',
-                associativity: Unknown
-            }),
-        },
+        "A + B + C + D",
         strip_expr_naked,
-        &operators
+        &default_operators()
     );
     // Only one sub-expression to strip, should not strip last sub-expression
     assert_eq_cloth!(
         "X + ((A * B) * C) + (D + E)",
-        AtomExpr {
-            atoms: vec![
-                Atom::Value("X".to_string()),
-                Atom::Parenthesized(AtomExpr {
-                    atoms: vec![
-                        Atom::Value("A".to_string()),
-                        Atom::Value("B".to_string()),
-                        Atom::Value("C".to_string()),
-                    ],
-                    operator: Some(Operator {
-                        op: '*',
-                        associativity: Unknown
-                    })
-                },),
-                Atom::Parenthesized(AtomExpr {
-                    atoms: vec![Atom::Value("D".to_string()), Atom::Value("E".to_string()),],
-                    operator: Some(Operator {
-                        op: '+',
-                        associativity: Unknown
-                    })
-                },),
-            ],
-            operator: Some(Operator {
-                op: '+',
-                associativity: Unknown
-            }),
-        },
+        "X + (A * B * C) + (D + E)",
         strip_expr_naked,
-        &operators
+        &default_operators()
     );
-    // Right-associativity
+    // Right-associative
     assert_eq_cloth!(
         "A ^ (B ^ (C ^ D))",
-        AtomExpr {
-            atoms: vec![
-                Atom::Value("A".to_string()),
-                Atom::Value("B".to_string()),
-                Atom::Value("C".to_string()),
-                Atom::Value("D".to_string()),
-            ],
-            operator: Some(Operator {
-                op: '^',
-                associativity: Unknown
-            })
-        },
+        "A ^ B ^ C ^ D",
         strip_expr_naked,
-        &operators
+        &default_operators()
+    );
+    // Non-associative
+    assert_eq_cloth!(
+        "(A - B) - C - (D - (E ^ (F ^ G)))",
+        "(A - B) - C - (D - (E ^ F ^ G))",
+        strip_expr_naked,
+        &default_operators()
     );
 }
 
 #[test]
 fn test_expr_dressing_up() {
-    let operators: Vec<Operator> = vec![
-        Operator {
-            op: '+',
-            associativity: Unknown,
-        },
-        Operator {
-            op: '*',
-            associativity: LeftAssociative,
-        },
-        Operator {
-            op: '^',
-            associativity: RightAssociative,
-        },
-    ];
     // Most basic test, no edge-cases
     assert_eq_cloth!(
         "A + B + C + D",
-        AtomExpr {
-            atoms: vec![
-                Atom::Parenthesized(AtomExpr {
-                    atoms: vec![
-                        Atom::Parenthesized(AtomExpr {
-                            atoms: vec![Atom::Value("A".to_string()), Atom::Value("B".to_string()),],
-                            operator: Some(Operator {
-                                op: '+',
-                                associativity: Unknown
-                            }),
-                        }),
-                        Atom::Value("C".to_string()),
-                    ],
-                    operator: Some(Operator {
-                        op: '+',
-                        associativity: Unknown
-                    }),
-                }),
-                Atom::Value("D".to_string()),
-            ],
-            operator: Some(Operator {
-                op: '+',
-                associativity: Unknown
-            }),
-        },
+        "((A + B) + C) + D",
         dress_up_expr,
-        &operators
+        &default_operators()
     );
     // Mix of operators
     assert_eq_cloth!(
         "X + (A * B * C) + (D + E)",
-        AtomExpr {
-            atoms: vec![
-                Atom::Parenthesized(AtomExpr {
-                    atoms: vec![
-                        Atom::Value("X".to_string()),
-                        Atom::Parenthesized(AtomExpr {
-                            atoms: vec![
-                                Atom::Parenthesized(AtomExpr {
-                                    atoms: vec![
-                                        Atom::Value("A".to_string()),
-                                        Atom::Value("B".to_string()),
-                                    ],
-                                    operator: Some(Operator {
-                                        op: '*',
-                                        associativity: Unknown
-                                    }),
-                                }),
-                                Atom::Value("C".to_string()),
-                            ],
-                            operator: Some(Operator {
-                                op: '*',
-                                associativity: Unknown
-                            })
-                        },),
-                    ],
-                    operator: Some(Operator {
-                        op: '+',
-                        associativity: Unknown
-                    })
-                }),
-                Atom::Parenthesized(AtomExpr {
-                    atoms: vec![Atom::Value("D".to_string()), Atom::Value("E".to_string()),],
-                    operator: Some(Operator {
-                        op: '+',
-                        associativity: Unknown
-                    })
-                },),
-            ],
-            operator: Some(Operator {
-                op: '+',
-                associativity: Unknown
-            }),
-        },
+        "(X + ((A * B) * C)) + (D + E)",
         dress_up_expr,
-        &operators
+        &default_operators()
     );
-    // Right associativity
+    // Right-associative
     assert_eq_cloth!(
-        "A ^ B ^ (C + D)",
-        AtomExpr {
-            atoms: vec![
-                Atom::Value("A".to_string(),),
-                Atom::Parenthesized(AtomExpr {
-                    atoms: vec![
-                        Atom::Value("B".to_string(),),
-                        Atom::Parenthesized(AtomExpr {
-                            atoms: vec![
-                                Atom::Value("C".to_string(),),
-                                Atom::Value("D".to_string(),),
-                            ],
-                            operator: Some(Operator {
-                                op: '+',
-                                associativity: Unknown,
-                            },),
-                        },),
-                    ],
-                    operator: Some(Operator {
-                        op: '^',
-                        associativity: Unknown,
-                    },),
-                },),
-            ],
-            operator: Some(Operator {
-                op: '^',
-                associativity: Unknown,
-            },),
-        },
+        "A ^ B ^ (C + D) ^ E",
+        "A ^ (B ^ ((C + D) ^ E))",
         dress_up_expr,
-        &operators
+        &default_operators()
+    );
+    // Non-associative
+    assert_eq_cloth!(
+        "(A - B) - C - (D - (E ^ F ^ G))",
+        "(A - B) - C - (D - (E ^ (F ^ G)))",
+        dress_up_expr,
+        &default_operators()
     );
     /*
     assert_eq_cloth!(
-        "A + B + C + D",
-        AtomExpr {
-            atoms: vec![],
-            operator: None,
-        },
+        "",
+        "",
         dress_up_expr,
-        &operators
+        &default_operators()
     );
     */
 }
