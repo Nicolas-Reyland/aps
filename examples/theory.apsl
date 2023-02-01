@@ -1,4 +1,4 @@
-/*			example of a algebraic strcuture definition			*/
+/*			example of a algebraic structure definition			*/
 
 
 // Definition of K (set of elements on which the operators will operate)
@@ -8,7 +8,7 @@ K :: N // natural numbers
 Could also do :
 K :: R // real numbers
 K :: Z // relative numbers
-K :: C // complexe numbers
+K :: C // complex numbers
 K :: Q // rational numbers
 K :: ? // (default) undefined : no information on K
 K :: R3 // R x R x R (3-dim vectors of real numbers)
