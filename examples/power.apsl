@@ -1,4 +1,4 @@
-^ :: {
+^ r :: {
     // Null element
     A ^ 0 = 1 ;
     // Identity element

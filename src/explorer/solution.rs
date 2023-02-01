@@ -1,38 +1,41 @@
 //
 
+use std::collections::HashSet;
 use std::thread::JoinHandle;
 use std::{
     sync::{Arc, Mutex},
     thread,
 };
 
-use crate::explorer::dress_up_expr;
 use crate::{
-    explorer::{explore_graph, init_graph, strip_expr_naked, ExprGraph, ExprNode},
-    parser::{AlgebraicFunction, AlgebraicProperty, AtomExpr, KProperty},
+    explorer::{dress_up_expr, explore_graph, init_graph, strip_expr_naked, ExprGraph, ExprNode},
+    parser::{AlgebraicFunction, AlgebraicProperty, AssociativityHashMap, AtomExpr, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
 
 pub fn solve_equality(
-    properties: Vec<AlgebraicProperty>,
-    functions: Vec<AlgebraicFunction>,
-    _k_properties: Vec<KProperty>,
+    properties: HashSet<AlgebraicProperty>,
+    functions: HashSet<AlgebraicFunction>,
+    _k_properties: HashSet<KProperty>,
+    associativities: &AssociativityHashMap,
     left_expression: &AtomExpr,
     right_expression: &AtomExpr,
     auto_break: bool,
 ) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>, bool)>> {
     // dress both expressions
     // left graph
-    let left = init_graph(dress_up_expr(left_expression));
+    let left = init_graph(dress_up_expr(left_expression, associativities));
     let left_mutex = Arc::new(Mutex::new(left));
     // right graph
-    let right = init_graph(dress_up_expr(right_expression));
+    let right = init_graph(dress_up_expr(right_expression, associativities));
     let right_mutex = Arc::new(Mutex::new(right));
     // number of explorations
     let mut depth: usize = 0;
     loop {
-        let lnodes: Vec<(ExprNode, AtomExpr)> = gather_nodes_from_graph(&left_mutex, depth as u8);
-        let rnodes: Vec<(ExprNode, AtomExpr)> = gather_nodes_from_graph(&right_mutex, depth as u8);
+        let lnodes: Vec<(ExprNode, AtomExpr)> =
+            gather_nodes_from_graph(&left_mutex, associativities, depth as u8);
+        let rnodes: Vec<(ExprNode, AtomExpr)> =
+            gather_nodes_from_graph(&right_mutex, associativities, depth as u8);
         // look for a common element
         for (lnode, naked_lexpr) in lnodes {
             for (rnode, naked_rexpr) in rnodes.clone() {
@@ -87,6 +90,7 @@ fn num_nodes_left_in_graph(left_mutex: &Arc<Mutex<ExprGraph>>) -> usize {
 
 fn gather_nodes_from_graph(
     left_mutex: &Arc<Mutex<ExprGraph>>,
+    operators: &AssociativityHashMap,
     _depth: u8,
 ) -> Vec<(ExprNode, AtomExpr)> {
     let mutex_clone = Arc::clone(&left_mutex);
@@ -95,13 +99,13 @@ fn gather_nodes_from_graph(
         .nodes
         .into_iter()
         // .filter(|node| node.depth == depth || node.depth + 1 == depth)
-        .map(|node| (node.clone(), strip_expr_naked(&node.atom_expr)))
+        .map(|node| (node.clone(), strip_expr_naked(&node.atom_expr, operators)))
         .collect()
 }
 
 fn start_graph_exploration(
-    properties: &Vec<AlgebraicProperty>,
-    functions: &Vec<AlgebraicFunction>,
+    properties: &HashSet<AlgebraicProperty>,
+    functions: &HashSet<AlgebraicFunction>,
     left_mutex: &Arc<Mutex<ExprGraph>>,
 ) -> JoinHandle<bool> {
     // clone things
@@ -161,13 +165,23 @@ fn find_route(
     // add all the left route
     route.append(&mut lroute);
     // remove the common element from the right route (or we'll have it twice)
-    // println!("route:\n{:#?}\n\nrroute:\n{:#?}\n", route, rroute);
-    assert_eq!(
-        match rroute.remove(0) {
-            (x, _, _) => strip_expr_naked(&x),
-        },
-        strip_expr_naked(&lcommon.atom_expr).clone()
-    );
+    rroute.remove(0);
+    /*
+    println!("(l)route :");
+    for (route_expr, route_tr, _) in route.clone() {
+        match route_tr {
+            Some(tr) => println!("\t{} | {}", route_expr, tr),
+            None => println!("\t{} | ?", route_expr),
+        }
+    }
+    println!("rroute :");
+    for (route_expr, route_tr, _) in rroute.clone() {
+        match route_tr {
+            Some(tr) => println!("\t{} | {}", route_expr, tr),
+            None => println!("\t{} | ?", route_expr),
+        }
+    }
+    */
     route.append(&mut rroute);
     // return the route
     route

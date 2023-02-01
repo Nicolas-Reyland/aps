@@ -4,8 +4,8 @@ use crate::explorer::strip_expr_naked;
 use crate::{
     explorer::{atom2atom_expr, explore_graph, init_graph, print_graph_dot_format},
     parser::{
-        self, split_algebraic_objects, AlgebraicFunction, AlgebraicProperty, Atom, AtomExpr,
-        KProperty,
+        self, split_algebraic_objects, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap,
+        Atom, AtomExpr, KProperty,
     },
     preprocessor::read_and_preprocess_file,
     solution::solve_equality,
@@ -15,23 +15,26 @@ use reedline_repl_rs::{
     clap::{parser::ValuesRef, Arg, ArgMatches, Command},
     Repl, Result,
 };
+use std::collections::{HashMap, HashSet};
 
 static TAB_WIDTH: usize = 8;
 
 #[derive(Default, Clone)]
 pub struct ReplContext {
-    pub properties: Vec<AlgebraicProperty>,
-    pub functions: Vec<AlgebraicFunction>,
-    pub k_properties: Vec<KProperty>,
+    pub properties: HashSet<AlgebraicProperty>,
+    pub functions: HashSet<AlgebraicFunction>,
+    pub k_properties: HashSet<KProperty>,
+    pub associativities: AssociativityHashMap,
     pub pretty_print_steps: bool,
     pub auto_break: bool,
 }
 
 pub fn init_context() -> ReplContext {
     ReplContext {
-        properties: Vec::new(),
-        functions: Vec::new(),
-        k_properties: Vec::new(),
+        properties: HashSet::new(),
+        functions: HashSet::new(),
+        k_properties: HashSet::new(),
+        associativities: HashMap::new(),
         pretty_print_steps: true,
         auto_break: true,
     }
@@ -41,6 +44,7 @@ fn reset_context(context: &mut ReplContext) {
     context.properties.clear();
     context.functions.clear();
     context.k_properties.clear();
+    context.associativities.clear();
     context.pretty_print_steps = true;
     context.auto_break = true;
 }
@@ -167,6 +171,13 @@ fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<St
             content.push_str(&format!(" | {}\n", k_property));
         }
     }
+    if !context.associativities.is_empty() {
+        // k properties
+        content.push_str("\n Operator Associativities :\n");
+        for (op_c, op_ass) in &context.associativities {
+            content.push_str(&format!(" | {} ({})\n", op_c, op_ass));
+        }
+    }
     Ok(Some(content))
 }
 
@@ -196,16 +207,13 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
 
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     let body_str = concat_args(args.get_many("body").unwrap());
-    let (mut properties, mut functions, mut k_properties) =
-        split_algebraic_objects(match parser::root::<parser::ApsParserKind>(&body_str) {
-            Ok(("", objects)) => objects,
-            Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
-            Err(err) => return Ok(Some(format!(" Error occured while parsing :{}\n", err))),
-        });
+    let objects = split_algebraic_objects(match parser::root::<parser::ApsParserKind>(&body_str) {
+        Ok(("", objects)) => objects,
+        Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
+        Err(err) => return Ok(Some(format!(" Error occurred while parsing :{}\n", err))),
+    });
     // extend context
-    context.properties.append(&mut properties);
-    context.functions.append(&mut functions);
-    context.k_properties.append(&mut k_properties);
+    extend_context(objects, context);
     Ok(Some(" Added object(s) to context.".to_owned()))
 }
 
@@ -264,6 +272,7 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
         context.properties.clone(),
         context.functions.clone(),
         context.k_properties.clone(),
+        &context.associativities,
         &property.atom_expr_left,
         &property.atom_expr_right,
         context.auto_break,
@@ -272,7 +281,7 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
         None => return Some(format!(" No solution found for {}", property)),
     };
     // build solution string
-    let mut solution_str = format!(" Solution found for '{}' :\n", property);
+    let mut solution_str = format!(" Solution found for {} :\n", property);
     let (first_expr, _, _) = solution.first().unwrap(); // no transform for the base expr
     solution_str.push_str(&format!("  {}\n", first_expr));
     if solution.len() < 2 {
@@ -287,7 +296,7 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
         .map(|(expr, rule, common)| {
             // Stringify expression
             let expr_str = if context.pretty_print_steps {
-                strip_expr_naked(expr).to_string()
+                strip_expr_naked(expr, &context.associativities).to_string()
             } else {
                 expr.to_string()
             };
@@ -356,7 +365,26 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
         Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
     };
     // split objects
-    let (mut properties, mut functions, mut k_properties) = split_algebraic_objects(alg_objects);
+    let objects = split_algebraic_objects(alg_objects);
+    // extend context
+    extend_context(objects, context);
+    true
+}
+
+fn extend_context(
+    objects: (
+        HashSet<AlgebraicProperty>,
+        HashSet<AlgebraicFunction>,
+        HashSet<KProperty>,
+        AssociativityHashMap,
+    ),
+    context: &mut ReplContext,
+) {
+    let (properties, functions, _k_properties, associativities) = objects;
+    context.properties.extend(properties);
+    context.functions.extend(functions.clone());
+    context.k_properties.extend(_k_properties);
+    context.associativities.extend(associativities);
     // add functions as properties
     context
         .properties
@@ -367,13 +395,7 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
             ))),
             atom_expr_right: function.atom_expr_right.clone(),
         }));
-    // extend context
-    context.properties.append(&mut properties);
-    context.functions.append(&mut functions);
-    context.k_properties.append(&mut k_properties);
-    true
 }
-
 fn concat_args(args: ValuesRef<String>) -> String {
     // concat args
     let mut property_str = String::new();

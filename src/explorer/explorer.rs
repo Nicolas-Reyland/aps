@@ -1,15 +1,18 @@
 // Graph Explorer
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     thread::{self, JoinHandle},
     vec,
 };
 
+use crate::parser::OperatorAssociativity::{
+    LeftAssociative, LeftRightAssociative, NonAssociative, RightAssociative, Unknown,
+};
 use crate::parser::{
-    parenthesized_atom, /*, GeneratorElement*/
-    AlgebraicFunction, AlgebraicProperty, Atom, AtomExpr, Operator,
+    parenthesized_atom, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr,
+    Operator, OperatorAssociativity,
 };
 
 #[derive(Debug, Clone)]
@@ -96,31 +99,41 @@ pub fn init_graph(expr: AtomExpr) -> ExprGraph {
 /// The returned value is the number of new nodes that were added
 pub fn explore_graph(
     graph: &mut ExprGraph,
-    properties: &Vec<AlgebraicProperty>,
-    functions: &Vec<AlgebraicFunction>,
+    properties: &HashSet<AlgebraicProperty>,
+    functions: &HashSet<AlgebraicFunction>,
 ) -> bool {
     // apply every property to all the outer-layer nodes of the graph
     let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
-    let mut handles: Vec<JoinHandle<(usize, usize, Vec<AtomExpr>)>> = Vec::new();
+    let mut handles: Vec<JoinHandle<(AlgebraicProperty, usize, Vec<AtomExpr>)>> = Vec::new();
     for node in graph
         .nodes
         .iter()
         .filter(|node| node.depth == graph.max_depth)
     {
+        // get some info about that node
+        let (node_has_transform, node_transform) = match &node.transform {
+            Some(node_tr) => (true, node_tr.clone()),
+            None => (false, {
+                let empty_atom_expr = AtomExpr {
+                    atoms: vec![],
+                    operator: None,
+                };
+                AlgebraicProperty {
+                    atom_expr_right: empty_atom_expr.clone(),
+                    atom_expr_left: empty_atom_expr,
+                }
+            }),
+        };
+        // filter :
         // Skip the rounds that would simply 'go back' one iteration.
-        // For example, let 1@"X + Y" -> 2@"Y + Z" be two connected nodes
+        // Here is an example: let 1@"X + Y" -> 2@"Y + Z" be two connected nodes
         // The transformation from 1 to 2 is "A + B = B + A". We don't want
         // to run this transformation again on 2 ("Y + X"),
         // since it will only give 1 back ("X + Y"), where we came from.
-        'properties: for (p_index, property) in properties.iter().enumerate() {
-            match &node.transform {
-                Some(node_transform) => {
-                    if node_transform == property {
-                        continue 'properties;
-                    }
-                }
-                None => (),
-            }
+        'properties: for property in properties
+            .iter()
+            .filter(|property| !node_has_transform || node_transform != **property)
+        {
             // one thread per exploration
             // maybe batch jobs together using worker threads later ?
             handles.push({
@@ -130,7 +143,7 @@ pub fn explore_graph(
                 let node_index = node.index;
                 thread::spawn(move || {
                     (
-                        p_index,
+                        property_clone.clone(),
                         node_index,
                         apply_property(&atom_expr_clone, &property_clone, &functions_clone),
                     )
@@ -140,8 +153,7 @@ pub fn explore_graph(
     }
     // join all the handles
     for handle in handles {
-        let (p_index, node_index, new_expressions) = handle.join().unwrap();
-        let property: &AlgebraicProperty = &properties[p_index];
+        let (property, node_index, new_expressions) = handle.join().unwrap();
         let node = &graph.nodes[node_index];
         new_nodes.extend(new_expressions.iter().map(|new_expr| {
             (
@@ -226,7 +238,7 @@ fn print_node_dot_format(node: &ExprNode) -> String {
 pub fn apply_property(
     src_expr: &AtomExpr,
     property: &AlgebraicProperty,
-    functions: &Vec<AlgebraicFunction>,
+    functions: &HashSet<AlgebraicFunction>,
 ) -> Vec<AtomExpr> {
     let mut new_expressions = match_and_apply(
         src_expr,
@@ -251,7 +263,7 @@ fn match_and_apply(
     src: &AtomExpr,
     left: &AtomExpr,
     right: &AtomExpr,
-    functions: &Vec<AlgebraicFunction>,
+    functions: &HashSet<AlgebraicFunction>,
 ) -> Vec<AtomExpr> {
     // call 'atom_expressions_match' on every expression (src_expr and sub-expression in parentheses)
     let mut new_expressions: Vec<AtomExpr> = Vec::new();
@@ -302,7 +314,7 @@ fn match_and_apply(
                 expr_args
                     .into_iter()
                     .enumerate()
-                    .map(move |(arg_i, arg)| (atom_i, arg_i, arg))
+                    .map(move |(arg_i, arg)| (atom_i, arg_i, arg)),
             ),
             _ => None,
         })
@@ -320,7 +332,10 @@ fn match_and_apply(
                             fn_args[arg_i] = (*new_arg).clone();
                             (fn_name, fn_args)
                         }),
-                        _ => panic!("Did not find function call at index {}: {:#?}", sub_i, new_atoms[sub_i]),
+                        _ => panic!(
+                            "Did not find function call at index {}: {:#?}",
+                            sub_i, new_atoms[sub_i]
+                        ),
                     };
                     AtomExpr {
                         atoms: new_atoms,
@@ -329,7 +344,8 @@ fn match_and_apply(
                 })
                 .collect::<Vec<AtomExpr>>(),
         );
-    }    new_expressions
+    }
+    new_expressions
 }
 
 fn atom_expressions_match(
@@ -410,12 +426,7 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
             },
             _ => (false, None),
         },
-        Atom::Value(_) => match atom_a {
-            Atom::Value(_) | Atom::Special(_) | Atom::Parenthesized(_) | Atom::FunctionCall(_) => {
-                (true, None)
-            }
-            _ => todo!("Unsupported atom type for atom_a: {:?}", atom_a),
-        },
+        Atom::Value(_) => (true, None),
         Atom::Special(_) => (atom_a == atom_b, None),
         Atom::FunctionCall((fn_name_b, fn_expr_args_b)) => match atom_a {
             // a function call is only mappable to the same function call, with each argument
@@ -448,13 +459,13 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
                                         // W ^ 2 mapped to A
                                         // 2 * Z mapped to B
                                         if old_arg_value != arg_value {
-                                            return (false, None)
+                                            return (false, None);
                                         }
-                                    },
+                                    }
                                     _ => (),
                                 }
                             }
-                        },
+                        }
                         None => return (false, None),
                     }
                 }
@@ -463,7 +474,6 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
             }
             _ => (false, None),
         },
-        _ => todo!("Unsupported atom type for atom_b: {:?}", atom_b),
     }
 }
 
@@ -472,7 +482,7 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
 fn generate_new_expression(
     v_expr: &AtomExpr,
     mappings: &Atom2AtomHashMap,
-    functions: &Vec<AlgebraicFunction>,
+    functions: &&HashSet<AlgebraicFunction>,
 ) -> AtomExpr {
     // init new atoms and operator
     let mut atoms: Vec<Atom> = Vec::new();
@@ -492,7 +502,7 @@ fn generate_new_expression(
             }
             Atom::Special(_) => atom_v.clone(),
             Atom::FunctionCall((fn_name, _)) => {
-                for function in functions {
+                for function in *functions {
                     if function.name == *fn_name {
                         return generate_new_expression(
                             &function.atom_expr_right,
@@ -503,8 +513,8 @@ fn generate_new_expression(
                 }
                 // function is not defined
                 panic!(
-                    "No function named \"{fn_name}\"\nFunctions :\n{:?}",
-                    functions
+                    "No function named \"{}\"\nFunctions :\n{:?}",
+                    fn_name, functions
                 );
             }
             /*
@@ -565,97 +575,223 @@ fn generate_new_expression(
 
 /// Strips the expression naked.
 /// Removes parentheses for easier and faster comparison.
+/// Operator associativity (left, right, none) is taken into account.
 ///
 /// Here is an example of what is meant :
 /// "((A + B) + C) + D" => "A + B + C + D"
 /// Of course, this only works for left-associative operators.
-/// The associativity of operators cannot be specified in the grammar as of yet.
-/// All operators are considered to be left-associative.
+/// The associativity of operators can be specified in the grammar :
+/// "^ r :: { ... }" makes the ^ operator right-associative.
+/// There are 3 choices : l, r, n (left-, right-, non- associative)
+/// If no associativity is gen (e.g. "+ :: { ... }", the default is left-associativity)
+/// By default, all operators are considered to be left-associative.
 ///
 /// Here is another example: "A + (B + C)" => "A + (B + C)"
 /// We cannot remove parentheses, since '+' is not right-associative
-/// (again, this should be customizable later on).
-pub fn strip_expr_naked(expr: &AtomExpr) -> AtomExpr {
+pub fn strip_expr_naked(expr: &AtomExpr, associativities: &AssociativityHashMap) -> AtomExpr {
     // left-associative operator case (default)
     let operator = expr.operator.clone();
     // "((A + B) + C) + D" => "(A + B) + C + D" => "A + B + C + D"
+    let associativity = get_operator_associativity(&operator, associativities);
 
-    // swap 'split_first' with 'split_last' for right-associative operators (further checks needed tho)
-    match expr.atoms.split_first() {
-        Some((isolated, rest)) => match isolated {
-            Atom::Parenthesized(sub_expr) if expr.operator == sub_expr.operator => {
-                // strip this sub-expression naked
-                let naked_sub_expr = strip_expr_naked(&sub_expr);
-                // merge the sub-expression into the current one
-                let mut before_atoms = naked_sub_expr.atoms.clone();
-                before_atoms.extend(rest.to_vec());
-                AtomExpr {
-                    atoms: before_atoms,
-                    operator,
+    if associativity == NonAssociative {
+        // only strip all the sub-expressions naked, do nothing with the current expression
+        return map_over_all_sub_expressions(
+            &expr.atoms,
+            expr.operator.clone(),
+            associativities,
+            &strip_expr_naked,
+        );
+    }
+    if associativity == LeftRightAssociative {
+        return strip_expr_naked_left_right(expr, associativities);
+    }
+
+    let left_ass = associativity == LeftAssociative;
+    // TODO: remove this later on
+    if !left_ass {
+        assert_eq!(associativity, RightAssociative);
+    }
+
+    // merge the atoms from an atom-expression (isolated) and the current expression
+    // except for the isolated one, sub-expressions are NOT yet stripped naked themselves
+    let new_atoms = match if left_ass {
+        expr.atoms.split_first()
+    } else {
+        expr.atoms.split_last()
+    } {
+        Some((isolated, rest)) => match isolated.clone() {
+            // the isolated atom is an expression, so we should remove the parentheses
+            Atom::Parenthesized(mut isolated_expr) if expr.operator == isolated_expr.operator => {
+                // make the isolated expression naked
+                isolated_expr = strip_expr_naked(&isolated_expr, associativities);
+                // merge the isolated and rest into new expression
+                let mut isolated_expr_atoms = Vec::new();
+                if left_ass {
+                    // isolated is left, and rest is right
+                    isolated_expr_atoms.append(&mut isolated_expr.atoms);
+                    isolated_expr_atoms.extend(rest.to_vec());
+                } else {
+                    // isolated is right, and rest is left
+                    isolated_expr_atoms.extend(rest.to_vec());
+                    isolated_expr_atoms.append(&mut isolated_expr.atoms);
                 }
+                isolated_expr_atoms
             }
-            _ => AtomExpr {
-                atoms: {
-                    expr.atoms
-                        .iter()
-                        .enumerate()
-                        .map(|(index, atom)| match (index, atom) {
-                            (index, Atom::Parenthesized(sub_expr)) if index != 0 => {
-                                Atom::Parenthesized(strip_expr_naked(&sub_expr))
-                            }
-                            _ => (*atom).clone(),
-                        })
-                        .collect()
-                },
-                operator,
-            },
+            // the isolated atom is not an AtomExpr (should not merge it with the others)
+            _ => expr.atoms.clone(),
         },
         // wtf ??
-        None => (*expr).clone(),
+        None => expr.atoms.clone(),
+    };
+    map_over_all_sub_expressions(&new_atoms, operator, associativities, &strip_expr_naked)
+}
+
+fn strip_expr_naked_left_right(
+    expr: &AtomExpr,
+    associativities: &AssociativityHashMap,
+) -> AtomExpr {
+    let mut new_atoms: Vec<Atom> = Vec::with_capacity(expr.atoms.len());
+    for atom in expr.atoms.clone() {
+        match atom.clone() {
+            Atom::Parenthesized(atom_expr) => {
+                if atom_expr.operator == expr.operator {
+                    // merge this expression
+                    let mut new_atom_expr =
+                        strip_expr_naked_left_right(&atom_expr, associativities);
+                    new_atoms.append(&mut new_atom_expr.atoms);
+                } else {
+                    // add it as-is (not to be merged)
+                    new_atoms.push(atom);
+                }
+            }
+            _ => new_atoms.push(atom),
+        }
     }
+
+    map_over_all_sub_expressions(
+        &new_atoms,
+        expr.operator.clone(),
+        associativities,
+        &strip_expr_naked,
+    )
 }
 
 /// Dresses the expression up.
 /// Adds parentheses for easier and faster property matching.
+/// Operator associativity (left, right, none) is taken into account.
 ///
 /// Here is an example of what is meant :
 /// "A + B + C + D" => "((A + B) + C) + D"
 /// Of course, this only works for left-associative operators.
-/// The associativity of operators cannot be specified in the grammar as of yet.
-/// All operators are considered to be left-associative.
-/// (again, this should be customizable later on).
-pub fn dress_up_expr(expr: &AtomExpr) -> AtomExpr {
+/// The associativity of operators can be specified in the grammar :
+/// "^ r :: { ... }" makes the ^ operator right-associative.
+/// There are 3 choices : l, r, n (left-, right-, non- associative)
+/// If no associativity is gen (e.g. "+ :: { ... }", the default is left-associativity)
+/// By default, all operators are considered to be left-associative.
+pub fn dress_up_expr(expr: &AtomExpr, associativities: &AssociativityHashMap) -> AtomExpr {
     // left-associative operator case (default)
     let operator = expr.operator.clone();
     // "A + B + C + D" => "(A + B + C) + D" => "((A + B) + C) + D"
+    let associativity = match get_operator_associativity(&operator, associativities) {
+        // It is both left and right associative, so we know that :
+        // A + B + C = A + (B + C) = (A + B) + C
+        LeftRightAssociative => LeftRightAssociative,
+        ass => ass,
+    };
 
-    // swap 'split_last' with 'split_first' for right-associative operators (further checks needed tho)
-    match expr.atoms.split_last() {
+    if associativity == NonAssociative {
+        // only dress up the sub-expressions naked, do nothing with the current expression
+        return map_over_all_sub_expressions(
+            &expr.atoms,
+            expr.operator.clone(),
+            associativities,
+            &dress_up_expr,
+        );
+    }
+
+    let left_ass = associativity == LeftAssociative;
+    // TODO: remove this later on
+    if !left_ass {
+        assert_eq!(associativity, RightAssociative);
+    }
+
+    // group all the atoms, except for one (isolated) into a new expression
+    // sub-expressions are NOT yet dressed up themselves, not even the isolated one
+    let new_atoms: Vec<Atom> = match if left_ass {
+        expr.atoms.split_last()
+    } else {
+        expr.atoms.split_first()
+    } {
         Some((isolated, rest)) => {
-            let dressed_up_isolated = match isolated {
-                Atom::Parenthesized(sub_expr) => Atom::Parenthesized(dress_up_expr(sub_expr)),
-                atom => (*atom).clone(),
-            };
             let num_left = rest.len();
             if num_left == 0 {
-                return atom2atom_expr(dressed_up_isolated);
-            }
-            let dressed_up_rest = if num_left == 1 {
-                rest[0].clone()
+                vec![isolated.clone()]
             } else {
-                Atom::Parenthesized(dress_up_expr(&AtomExpr {
-                    atoms: rest.to_vec(),
-                    operator: operator.clone(),
-                }))
-            };
-            AtomExpr {
-                // swap this vector when handling right-associative
-                atoms: vec![dressed_up_rest, dressed_up_isolated],
-                operator: operator.clone(),
+                let rest_expr = if num_left == 1 {
+                    rest[0].clone()
+                } else {
+                    Atom::Parenthesized(AtomExpr {
+                        atoms: rest.to_vec(),
+                        operator: operator.clone(),
+                    })
+                };
+                if left_ass {
+                    vec![rest_expr, isolated.clone()]
+                } else {
+                    vec![isolated.clone(), rest_expr]
+                }
             }
         }
         // wtf ??
         None => return (*expr).clone(),
+    };
+    map_over_all_sub_expressions(&new_atoms, operator, associativities, &dress_up_expr)
+}
+
+/// Returns the associativity of the operator, based on the given vector of operators
+/// If operator is None, it is seen as non-associative. The default associativity for an
+/// operator is the left-associativity.
+fn get_operator_associativity(
+    operator: &Option<Operator>,
+    associativities: &AssociativityHashMap,
+) -> OperatorAssociativity {
+    if *operator == None {
+        NonAssociative
+    } else {
+        let operator_char = operator.clone().unwrap().op;
+        match associativities.get(&operator_char) {
+            Some(associativity) if *associativity != Unknown => *associativity,
+            _ => LeftAssociative,
+        }
+    }
+}
+
+/// Recursively maps f over all sub expressions in atoms.
+/// The returned AtomExpr struct is constructed with the given operator
+/// The operators argument is used in the calls to f
+fn map_over_all_sub_expressions(
+    atoms: &Vec<Atom>,
+    operator: Option<Operator>,
+    associativities: &AssociativityHashMap,
+    f: &dyn Fn(&AtomExpr, &AssociativityHashMap) -> AtomExpr,
+) -> AtomExpr {
+    AtomExpr {
+        atoms: atoms
+            .iter()
+            .map(|atom| match atom {
+                Atom::Parenthesized(sub_expr) => Atom::Parenthesized(f(&sub_expr, associativities)),
+                Atom::FunctionCall((fn_name, args)) => Atom::FunctionCall((
+                    fn_name.to_string(),
+                    // map each argument with f
+                    args.iter()
+                        .map(|arg_expr| f(arg_expr, associativities))
+                        .collect(),
+                )),
+                _ => (*atom).clone(),
+            })
+            .collect(),
+        operator,
     }
 }
 
