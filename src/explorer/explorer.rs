@@ -760,7 +760,7 @@ pub fn dress_up_expr(expr: &AtomExpr, associativities: &AssociativityHashMap) ->
     let associativity = match get_operator_associativity(&operator, associativities) {
         // It is both left and right associative, so we know that :
         // A + B + C = A + (B + C) = (A + B) + C
-        LeftRightAssociative => LeftRightAssociative,
+        LeftRightAssociative => LeftAssociative,
         ass => ass,
     };
 
