@@ -49,10 +49,8 @@ pub fn solve_equality(
             }
         }
         // explore the graphs once each
-        let left_handle =
-            start_graph_exploration(&properties, &left_mutex, associativities);
-        let right_handle =
-            start_graph_exploration(&properties, &right_mutex, associativities);
+        let left_handle = start_graph_exploration(&properties, &left_mutex, associativities);
+        let right_handle = start_graph_exploration(&properties, &right_mutex, associativities);
         let left_has_evolved = left_handle.join().unwrap();
         let right_has_evolved = right_handle.join().unwrap();
 

@@ -19,11 +19,7 @@ macro_rules! test_match {
     ($src_expr:expr, $property:expr, $expected:expr, $context:ident) => {
         let src_expr = str2atom($src_expr);
         let property = parse_property!($property);
-        let actual = apply_property(
-            &src_expr,
-            &property,
-            &$context.associativities,
-        );
+        let actual = apply_property(&src_expr, &property, &$context.associativities);
         let expected: HashSet<Atom> = $expected
             .iter()
             .map(|expr_str| str2atom(expr_str))

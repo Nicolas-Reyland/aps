@@ -1,6 +1,7 @@
 // APS Repl
 
 use crate::explorer::strip_expr_naked;
+use crate::parser::FunctionCallExpr;
 use crate::{
     explorer::{explore_graph, init_graph, print_graph_dot_format},
     parser::{
@@ -16,7 +17,6 @@ use reedline_repl_rs::{
     Repl, Result,
 };
 use std::collections::{HashMap, HashSet};
-use crate::parser::FunctionCallExpr;
 
 static TAB_WIDTH: usize = 8;
 
@@ -236,11 +236,7 @@ fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         .unwrap()
         .parse::<u8>()?;
     for _ in 0..depth {
-        if !explore_graph(
-            &mut graph,
-            &context.properties,
-            &context.associativities,
-        ) {
+        if !explore_graph(&mut graph, &context.properties, &context.associativities) {
             break;
         }
     }
@@ -421,7 +417,7 @@ fn concat_args(args: ValuesRef<String>) -> String {
 }
 
 pub fn str2atom(input: &str) -> Atom {
-    match parser::atom_p::<parser::ApsParserKind>(input) {
+    match parser::toplevel_atom_p::<parser::ApsParserKind>(input) {
         Ok(("", expr)) => expr,
         Ok((rest, parsed)) => panic!(
             " Failed to parse entirety of atom:\nRest: <<{}>>\nParsed (expr) :\n{:#?}\n",
