@@ -432,9 +432,9 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 fn_name_p,
                 def_p,
-                separated_list1(sp_terminated!(sp_preceded!(char_p(','))), atom_expr_p),
+                separated_list1(sp_terminated!(sp_preceded!(char_p(','))), simple_atom_expr_p),
                 fn_def_symbol_p,
-                atom_expr_p,
+                simple_atom_expr_p,
                 end_p,
             )),
             |(name, _, atom_expr_args, _, atom_expr_right, _)| AlgebraicFunction {
