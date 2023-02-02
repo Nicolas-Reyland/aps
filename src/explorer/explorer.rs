@@ -12,7 +12,7 @@ use crate::parser::OperatorAssociativity::{
 };
 use crate::parser::{
     parenthesized_atom, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr,
-    Operator, OperatorAssociativity,
+    Operator, OperatorAssociativity, SequentialExpr,
 };
 
 #[derive(Debug, Clone)]
@@ -470,10 +470,43 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
             }
             _ => (false, None),
         },
-        Atom::Sequential(seq_expr) => {
-            todo!("left_to_right match this: {}", seq_expr)
-        }
+        Atom::Sequential(seq_expr_b) => match atom_a {
+            Atom::Sequential(seq_expr_a) => left_to_right_match_sequential(seq_expr_b, seq_expr_a),
+            _ => (false, None),
+        },
     }
+}
+
+fn left_to_right_match_sequential(
+    seq_expr_b: &SequentialExpr,
+    seq_expr_a: &SequentialExpr,
+) -> (bool, Option<Atom2AtomHashMap>) {
+    if seq_expr_b.operator != seq_expr_a.operator {
+        return (false, None);
+    }
+    let mut seq_mappings: Atom2AtomHashMap = HashMap::new();
+    match left_to_right_match(&seq_expr_b.enumerator, &seq_expr_a.enumerator) {
+        (false, _) => return (false, None),
+        (true, Some(enum_mappings)) => {
+            seq_mappings.extend(enum_mappings);
+        }
+        (true, None) => (),
+    };
+    match left_to_right_match(&seq_expr_b.body, &seq_expr_a.body) {
+        (false, _) => return (false, None),
+        (true, Some(body_mappings)) => {
+            seq_mappings.extend(body_mappings);
+        }
+        (true, None) => (),
+    };
+    (
+        true,
+        if seq_mappings.is_empty() {
+            None
+        } else {
+            Some(seq_mappings)
+        },
+    )
 }
 
 /// Generate new expression using source, value-expression and mappings
@@ -515,10 +548,10 @@ fn generate_new_expression(
                     "No function named \"{}\"\nFunctions :\n{:?}",
                     fn_name, functions
                 )
-            },
+            }
             Atom::Sequential(seq) => {
                 todo!("Sequential expressions not done yet: {}", seq)
-            },
+            }
             /*
             Atom::Generator(gen_expr) => {
                 todo!("Generator expressions not handled yet");
@@ -798,8 +831,11 @@ fn map_over_all_sub_expressions(
 }
 
 pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
-    AtomExpr {
-        atoms: vec![atom],
-        operator: None,
+    match atom {
+        Atom::Parenthesized(expr) => expr.clone(),
+        _ => AtomExpr {
+            atoms: vec![atom],
+            operator: None,
+        },
     }
 }

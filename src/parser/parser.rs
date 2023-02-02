@@ -295,7 +295,7 @@ fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i s
 }
 
 /// parenthesized_atom : '(' atom_expr ')' sp
-fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+fn parenthesized_atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
     context(
@@ -333,21 +333,25 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// sequential_expr : '#' sp op sp ':' sp atom sp ':' sp atom sp '#'
+/// sequential_expr : '#' sp op sp ':' sp atom sp ':' sp atom sp '#' sp
 pub fn sequential_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
     context(
         "sequential expr",
+        // ... sp
         map(
-            tuple((
-                preceded(sp_preceded!(char_p('#')), op_p),
+            sp_terminated!(tuple((
+                // '#' sp op
+                preceded(sp_terminated!(char_p('#')), op_p),
+                // sp ':' sp atom
                 preceded(sp_terminated!(sp_preceded!(char_p(':'))), atom_p),
+                // sp ':' sp atom sp '#'
                 preceded(
                     sp_terminated!(sp_preceded!(char_p(':'))),
                     terminated(atom_p, sp_preceded!(char_p('#'))),
                 ),
-            )),
+            ))),
             |(operator, enumerator, body)| {
                 Atom::Sequential(Box::new(SequentialExpr {
                     operator,
@@ -418,7 +422,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// fn_def : fn_name def simple_atom_expr (sp ',' sp simple_atom_expr) fn_def atom_expr end
+/// fn_def : fn_name def atom_expr (sp ',' sp atom_expr) fn_def atom_expr end
 pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AlgebraicFunction, E> {
@@ -430,7 +434,7 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                 def_p,
                 separated_list1(
                     sp_terminated!(sp_preceded!(char_p(','))),
-                    simple_atom_expr_p,
+                    atom_expr_p,
                 ),
                 fn_def_symbol_p,
                 atom_expr_p,
@@ -484,7 +488,7 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// atom : atom_symbol | special_symbol | parenthesized_atom | fn_call | sequential_expr_p
+/// atom : atom_symbol | special_symbol | parenthesized_atom_expr | fn_call | sequential_expr
 fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
@@ -493,7 +497,7 @@ fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
         alt((
             atom_symbol_p,
             special_symbol_p,
-            parenthesized_atom_p,
+            parenthesized_atom_expr_p,
             fn_call_p,
             sequential_expr_p,
         )),
@@ -632,7 +636,7 @@ fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     context("property list", many0(sp_terminated!(property_p)))(input)
 }
 
-/// property : atom_expr equ atom_expr end
+/// property : atom_expr_p equ atom_expr_p end
 pub fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AlgebraicProperty, E> {
