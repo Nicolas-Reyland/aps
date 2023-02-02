@@ -4,7 +4,7 @@ pub mod parser;
 pub mod preprocessor;
 #[path = "repl/repl.rs"]
 pub mod repl;
-#[path = "explorer/solution.rs"]
+#[path = "solution/solution.rs"]
 pub mod solution;
 #[path = "explorer/explorer.rs"]
 pub mod explorer;
