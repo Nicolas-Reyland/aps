@@ -144,6 +144,13 @@ fn test_expr_dressing_up() {
         dress_up_expr,
         &default_operators()
     );
+    // Left-Right-Associative
+    assert_eq_cloth!(
+        "A @ B @ C @ D @ E",
+        "(((A @ B) @ C) @ D) @ E",
+        dress_up_expr,
+        &default_operators()
+    );
     // Non-associative
     assert_eq_cloth!(
         "(A - B) - C - (D - (E ^ F ^ G))",
