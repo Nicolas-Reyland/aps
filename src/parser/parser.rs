@@ -527,10 +527,7 @@ pub fn toplevel_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
 ) -> IResult<&'i str, Atom, E> {
     context(
         "toplevel atom",
-        alt((
-            map(atom_expr_p, parenthesized_atom),
-            atom_p,
-        )),
+        alt((map(atom_expr_p, parenthesized_atom), atom_p)),
     )(input)
 }
 

@@ -74,24 +74,12 @@ fn brace_def() {
                 associativity: Some(NonAssociative),
                 properties: vec![
                     AlgebraicProperty {
-                        left_atom: Atom::Parenthesized(AtomExpr {
-                            atoms: vec![Atom::Symbol("A".to_string(),),],
-                            operator: None,
-                        }),
-                        right_atom: Atom::Parenthesized(AtomExpr {
-                            atoms: vec![Atom::Value(3,),],
-                            operator: None,
-                        }),
+                        left_atom: Atom::Symbol("A".to_string(),),
+                        right_atom: Atom::Value(3,),
                     },
                     AlgebraicProperty {
-                        left_atom: Atom::Parenthesized(AtomExpr {
-                            atoms: vec![Atom::Symbol("B".to_string(),),],
-                            operator: None,
-                        }),
-                        right_atom: Atom::Parenthesized(AtomExpr {
-                            atoms: vec![Atom::Symbol("C".to_string(),),],
-                            operator: None,
-                        }),
+                        left_atom: Atom::Symbol("B".to_string(),),
+                        right_atom: Atom::Symbol("C".to_string(),),
                     },
                 ],
             },
@@ -106,7 +94,7 @@ fn fn_def() {
         Ok((
             "",
             AlgebraicFunction {
-                name: "square".to_string(),
+                name: "pow".to_string(),
                 arg_atoms: vec![
                     Atom::Symbol("A".to_string(),),
                     Atom::Symbol("N".to_string(),),

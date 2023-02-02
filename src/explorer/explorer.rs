@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::parser::OperatorAssociativity::{
-    LeftAssociative, LeftRightAssociative, NonAssociative, RightAssociative, Unknown,
+    LeftAssociative, LeftRightAssociative, NonAssociative, Unknown,
 };
 use crate::parser::{
     parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr,
@@ -340,14 +340,29 @@ fn match_and_apply_all_sub_expressions(
         ),
         Atom::Sequential(seq) => {
             // go through enumerate
-            new_atoms.extend(match_and_apply(
-                &seq.enumerator,
-                left,
-                right,
-                associativities,
-            ));
+            new_atoms.extend(
+                match_and_apply(&seq.enumerator, left, right, associativities)
+                    .into_iter()
+                    .map(|enumerator| {
+                        Atom::Sequential(Box::new(SequentialExpr {
+                            operator: seq.operator.clone(),
+                            enumerator,
+                            body: seq.body.clone(),
+                        }))
+                    }),
+            );
             // go through body
-            new_atoms.extend(match_and_apply(&seq.body, left, right, associativities))
+            new_atoms.extend(
+                match_and_apply(&seq.body, left, right, associativities)
+                    .into_iter()
+                    .map(|body| {
+                        Atom::Sequential(Box::new(SequentialExpr {
+                            operator: seq.operator.clone(),
+                            enumerator: seq.enumerator.clone(),
+                            body,
+                        }))
+                    }),
+            );
         }
         _ => (),
     };
@@ -792,11 +807,6 @@ pub fn strip_expr_naked(atom: &Atom, associativities: &AssociativityHashMap) -> 
     }
 
     let left_ass = associativity == LeftAssociative;
-    // TODO: remove this later on
-    if !left_ass {
-        assert_eq!(associativity, RightAssociative);
-    }
-
     // merge the atoms from an atom-expression (isolated) and the current expression
     // except for the isolated one, sub-expressions are NOT yet stripped naked themselves
     let new_atoms = match if left_ass {
@@ -887,7 +897,7 @@ fn strip_expr_naked_left_right(expr: &AtomExpr, associativities: &AssociativityH
 pub fn dress_up_expr(atom: &Atom, associativities: &AssociativityHashMap) -> Atom {
     let expr = match atom {
         Atom::Parenthesized(e) => e,
-        _ => return atom.clone(),
+        _ => return map_over_all_sub_expressions(atom, associativities, &dress_up_expr),
     };
     // left-associative operator case (default)
     let operator = expr.operator.clone();
@@ -912,11 +922,6 @@ pub fn dress_up_expr(atom: &Atom, associativities: &AssociativityHashMap) -> Ato
     }
 
     let left_ass = associativity == LeftAssociative;
-    // TODO: remove this later on
-    if !left_ass {
-        assert_eq!(associativity, RightAssociative);
-    }
-
     // group all the atoms, except for one (isolated) into a new expression
     // sub-expressions are NOT yet dressed up themselves, not even the isolated one
     let new_atoms: Vec<Atom> = match if left_ass {
@@ -932,7 +937,7 @@ pub fn dress_up_expr(atom: &Atom, associativities: &AssociativityHashMap) -> Ato
                 let rest_expr = if num_left == 1 {
                     rest[0].clone()
                 } else {
-                    Atom::Parenthesized(AtomExpr {
+                    parenthesized_atom(AtomExpr {
                         atoms: rest.to_vec(),
                         operator: operator.clone(),
                     })

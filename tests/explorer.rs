@@ -28,7 +28,7 @@ macro_rules! assert_eq_cloth {
         assert_eq!(
             actual_atom,
             destination_atom,
-            "Assertion of cloth equality failed: {}(\"{}\") != \"{}\".\nLeft (actual): {}\nRight (expected): {}",
+            "Assertion of cloth equality failed:\n{}(\"{}\") != \"{}\".\nLeft (actual): {:#?}\nRight (expected): {:#?}",
             stringify!($f),
             $src_expression,
             $dst_expression,
@@ -39,7 +39,7 @@ macro_rules! assert_eq_cloth {
 }
 
 #[test]
-fn test_expr_stripping() {
+fn expr_stripping() {
     assert_eq_cloth!(
         "(A + B) + C",
         "A + B + C",
@@ -84,7 +84,7 @@ fn test_expr_stripping() {
 }
 
 #[test]
-fn test_expr_fn_call_stripping() {
+fn expr_fn_call_stripping() {
     // Most basic test, no edge-cases
     assert_eq_cloth!(
         "func((A * B) * C)",
@@ -109,7 +109,31 @@ fn test_expr_fn_call_stripping() {
 }
 
 #[test]
-fn test_expr_dressing_up() {
+fn expr_sequential_stripping() {
+    // Only enumerator
+    assert_eq_cloth!(
+        "# @ : (A * B) * C : X #",
+        "# @ : A * B * C : X #",
+        strip_expr_naked,
+        &default_operators()
+    );
+    // Only body
+    assert_eq_cloth!(
+        "# @ : X : (A + B) + C #",
+        "# @ : X : A + B + C #",
+        strip_expr_naked,
+        &default_operators()
+    );
+    // Nested sequentials
+    assert_eq_cloth!(
+        "# @ : (X + # $ : Y : (Z + Z) + Z #) + G : A ^ (B ^ C) #",
+        "# @ : X + # $ : Y : Z + Z + Z # + G : A ^ B ^ C #",
+        strip_expr_naked,
+        &default_operators()
+    );
+}
+#[test]
+fn expr_dressing_up() {
     // Most basic test, no edge-cases
     assert_eq_cloth!(
         "A + B + C + D",
@@ -157,7 +181,7 @@ fn test_expr_dressing_up() {
 }
 
 #[test]
-fn test_expr_fn_call_dressing_up() {
+fn expr_fn_call_dressing_up() {
     // Most basic test, no edge-cases
     assert_eq_cloth!(
         "func(A * B * C)",
@@ -176,6 +200,31 @@ fn test_expr_fn_call_dressing_up() {
     assert_eq_cloth!(
         "f(g(h(0 ^ 2 ^ o(1))))",
         "f(g(h(0 ^ (2 ^ o(1)))))",
+        dress_up_expr,
+        &default_operators()
+    );
+}
+
+#[test]
+fn expr_sequential_dressing_up() {
+    // Only enumerator
+    assert_eq_cloth!(
+        "# @ : A * B * C : X #",
+        "# @ : (A * B) * C : X #",
+        dress_up_expr,
+        &default_operators()
+    );
+    // Only body
+    assert_eq_cloth!(
+        "# @ : X : A + B + C #",
+        "# @ : X : (A + B) + C #",
+        dress_up_expr,
+        &default_operators()
+    );
+    // Nested sequentials
+    assert_eq_cloth!(
+        "# @ : X + # $ : Y : Z + Z + Z # + G : A ^ B ^ C #",
+        "# @ : (X + # $ : Y : (Z + Z) + Z #) + G : A ^ (B ^ C) #",
         dress_up_expr,
         &default_operators()
     );
