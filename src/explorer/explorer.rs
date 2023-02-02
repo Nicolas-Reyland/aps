@@ -9,9 +9,10 @@ use std::{
 
 use crate::parser::{
     parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr,
-    Operator, SequentialExpr,
+    SequentialExpr,
 };
-use crate::clothing::{strip_expr_naked,dress_up_expr};
+use crate::clothing::strip_expr_naked;
+use crate::generate::generate_atom;
 
 #[derive(Debug, Clone)]
 pub struct ExprGraph {
@@ -67,7 +68,7 @@ impl fmt::Display for ExprNode {
     }
 }
 
-type Atom2AtomHashMap = HashMap<Atom, Atom>;
+pub type Atom2AtomHashMap = HashMap<Atom, Atom>;
 
 /// init a expression-graph
 pub fn init_graph(atom: Atom) -> ExprGraph {
@@ -279,12 +280,14 @@ fn match_and_apply(
     // recursively call 'match_and_apply' on all sorts of sub-expressions
     // these are: expressions, function-call-args
     // all atom types are 'penetrated' (also sequential-expressions)
+    /*
     new_atoms.extend(match_and_apply_all_sub_expressions(
         src,
         left,
         right,
         associativities,
     ));
+     */
 
     new_atoms
 }
@@ -669,99 +672,6 @@ fn left_to_right_match_sequentials(
     } else {
         Some(seq_mappings)
     })
-}
-
-/// Generate new expression using source, value-expression and mappings
-/// mappings matches atom-names from the source-expression to the ones in the value-expression (and vice-versa)
-fn generate_atom(
-    scheme: &Atom,
-    mappings: &Atom2AtomHashMap,
-    associativities: &AssociativityHashMap,
-) -> Atom {
-    match scheme {
-        Atom::Parenthesized(expr) => generate_expression(expr, mappings, associativities),
-        Atom::Value(_) => scheme.clone(),
-        Atom::Symbol(_) => match mappings.get(scheme) {
-            Some(gen_atom) => gen_atom.clone(),
-            None => panic!(
-                "Could not find mapping for scheme {} :\nMappings :\n{:#?}\n",
-                scheme, mappings
-            ),
-        },
-        Atom::FunctionCall(fn_call) => {
-            let new_args = fn_call
-                .args
-                .iter()
-                .map(|arg| generate_atom(arg, mappings, associativities))
-                .collect();
-            Atom::FunctionCall(FunctionCallExpr {
-                name: fn_call.name.clone(),
-                args: new_args,
-            })
-        }
-        Atom::Sequential(seq) => generate_sequential(seq, mappings, associativities),
-    }
-}
-
-fn generate_expression(
-    scheme_expr: &AtomExpr,
-    mappings: &Atom2AtomHashMap,
-    associativities: &AssociativityHashMap,
-) -> Atom {
-    // init new atoms and operator
-    let mut atoms: Vec<Atom> = Vec::new();
-    let operator: Option<Operator> = scheme_expr.operator.clone();
-    // match each atom of the v-expr
-    let num_scheme_atoms = scheme_expr.atoms.len();
-    let mut i = 0;
-    //println!("Mappings:\n{:#?}\n", mappings);
-    /* 'main_loop: */
-    while i < num_scheme_atoms {
-        let scheme = &scheme_expr.atoms[i];
-
-        // normal mapping
-        atoms.push(generate_atom(scheme, mappings, associativities));
-
-        i += 1;
-    }
-
-    parenthesized_atom(AtomExpr { atoms, operator })
-}
-
-fn generate_sequential(
-    seq: &SequentialExpr,
-    mappings: &Atom2AtomHashMap,
-    associativities: &AssociativityHashMap,
-) -> Atom {
-    let mapped_enumerator = generate_atom(&seq.enumerator.clone(), mappings, associativities);
-    match mapped_enumerator.clone() {
-        Atom::Value(n) if n != 0 => {
-            let n_size = n as usize;
-            let mut atoms: Vec<Atom> = Vec::with_capacity(n_size);
-            atoms.push(generate_atom(&seq.body.clone(), mappings, associativities));
-            dress_up_expr(
-                &parenthesized_atom(AtomExpr {
-                    atoms: atoms
-                        .into_iter()
-                        .cycle()
-                        .take(n_size)
-                        .collect::<Vec<Atom>>(),
-                    operator: if n == 1 {
-                        None
-                    } else {
-                        Some(seq.operator.clone())
-                    },
-                }),
-                associativities,
-            )
-        }
-        // this includes the case where the enumerator is '0'
-        _ => Atom::Sequential(Box::new(SequentialExpr {
-            operator: seq.operator.clone(),
-            enumerator: mapped_enumerator,
-            body: generate_atom(&seq.body.clone(), mappings, associativities),
-        })),
-    }
 }
 
 pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
