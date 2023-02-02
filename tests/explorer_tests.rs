@@ -153,6 +153,7 @@ fn test_expr_dressing_up() {
     );
     // Non-associative
     assert_eq_cloth!(
+        // This expression is illegal (right?) if '-' is non-associative, but that's not our problem
         "(A - B) - C - (D - (E ^ F ^ G))",
         "(A - B) - C - (D - (E ^ (F ^ G)))",
         dress_up_expr,

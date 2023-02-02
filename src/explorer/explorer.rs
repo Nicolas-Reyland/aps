@@ -143,7 +143,12 @@ pub fn explore_graph(
                     (
                         property_clone.clone(),
                         node_index,
-                        apply_property(&atom_expr_clone, &property_clone, &functions_clone, &associativities_clone),
+                        apply_property(
+                            &atom_expr_clone,
+                            &property_clone,
+                            &functions_clone,
+                            &associativities_clone,
+                        ),
                     )
                 })
             });
@@ -279,7 +284,42 @@ fn match_and_apply(
         }
         None => (),
     }
-    // recursively call 'atom_expressions_match' on the sub-expressions
+    // recursively call 'atom_expressions_match' on sub-expressions
+    new_expressions.extend(match_and_apply_sub_expressions(
+        src,
+        left,
+        right,
+        functions,
+        associativities,
+    ));
+    // recursively call 'atom_expressions_match' on function calls arguments
+    new_expressions.extend(match_and_apply_fn_calls_args(
+        src,
+        left,
+        right,
+        functions,
+        associativities,
+    ));
+    // recursively call 'atom_expressions_match' on sequential enumerators and bodies
+    new_expressions.extend(match_and_apply_sequential_exprs(
+        src,
+        left,
+        right,
+        functions,
+        associativities,
+    ));
+
+    new_expressions
+}
+
+fn match_and_apply_sub_expressions(
+    src: &AtomExpr,
+    left: &AtomExpr,
+    right: &AtomExpr,
+    functions: &HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
+) -> Vec<AtomExpr> {
+    let mut new_expressions: Vec<AtomExpr> = Vec::new();
     for (sub_i, sub) in src
         .atoms
         .iter()
@@ -307,8 +347,18 @@ fn match_and_apply(
                 .collect::<Vec<AtomExpr>>(),
         );
     }
+    new_expressions
+}
 
-    // recursively call 'atom_expressions_match' on the function calls
+fn match_and_apply_fn_calls_args(
+    src: &AtomExpr,
+    left: &AtomExpr,
+    right: &AtomExpr,
+    functions: &HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
+) -> Vec<AtomExpr> {
+    let mut new_expressions: Vec<AtomExpr> = Vec::new();
+    // recursively call 'atom_expressions_match' on the function call arguments
     for (sub_i, arg_i, sub) in src
         .atoms
         .iter()
@@ -336,9 +386,9 @@ fn match_and_apply(
                             fn_args[arg_i] = (*new_arg).clone();
                             (fn_name, fn_args)
                         }),
-                        _ => panic!(
-                            "Did not find function call at index {}: {:#?}",
-                            sub_i, new_atoms[sub_i]
+                        incorrect_atom => panic!(
+                            "Did not find a function call at index {}: {:#?}",
+                            sub_i, incorrect_atom
                         ),
                     };
                     AtomExpr {
@@ -352,25 +402,89 @@ fn match_and_apply(
     new_expressions
 }
 
+fn match_and_apply_sequential_exprs(
+    src: &AtomExpr,
+    left: &AtomExpr,
+    right: &AtomExpr,
+    functions: &HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
+) -> Vec<AtomExpr> {
+    let mut new_expressions: Vec<AtomExpr> = Vec::new();
+    // recursively call 'atom_expressions_match' on the function call arguments
+    for (seq_i, seq) in src
+        .atoms
+        .iter()
+        .enumerate()
+        .filter_map(|(atom_i, atom)| match atom {
+            Atom::Sequential(seq) => Some((atom_i, seq.clone())),
+            _ => None,
+        })
+    {
+        new_expressions.extend(
+            match_and_apply(&seq.enumerator, left, right, functions, associativities)
+                .iter()
+                .map(|new_enum| {
+                    let mut new_atoms = src.atoms.clone();
+                    match new_atoms[seq_i].clone() {
+                        Atom::Sequential(old_seq) => {
+                            new_atoms[seq_i] = Atom::Sequential(SequentialExpr {
+                                operator: old_seq.operator.clone(),
+                                enumerator: (*new_enum).clone(),
+                                body: old_seq.body.clone(),
+                            })
+                        }
+                        incorrect_atom => panic!(
+                            "Did not find a sequential expression at index {}: {:#?}",
+                            seq_i, incorrect_atom
+                        ),
+                    };
+                    AtomExpr {
+                        atoms: new_atoms,
+                        operator: src.operator.clone(),
+                    }
+                })
+                .chain(
+                    match_and_apply(&seq.body, left, right, functions, associativities)
+                        .iter()
+                        .map(|new_body| {
+                            let mut new_atoms = src.atoms.clone();
+                            match new_atoms[seq_i].clone() {
+                                Atom::Sequential(old_seq) => {
+                                    new_atoms[seq_i] = Atom::Sequential(SequentialExpr {
+                                        operator: old_seq.operator.clone(),
+                                        enumerator: old_seq.enumerator.clone(),
+                                        body: (*new_body).clone(),
+                                    })
+                                }
+                                incorrect_atom => panic!(
+                                    "Did not find a sequential expression at index {}: {:#?}",
+                                    seq_i, incorrect_atom
+                                ),
+                            };
+                            AtomExpr {
+                                atoms: new_atoms,
+                                operator: src.operator.clone(),
+                            }
+                        }),
+                )
+                .collect::<Vec<AtomExpr>>(),
+        );
+    }
+    new_expressions
+}
+
 fn atom_expressions_match(
     src_expr: &AtomExpr,  // source expression
     dest_expr: &AtomExpr, // expression to match against
 ) -> Option<Atom2AtomHashMap> {
     // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
     let mut mappings: Atom2AtomHashMap = HashMap::new();
-    // number of atoms
-    let num_src_atoms = src_expr.atoms.len();
-    let num_dest_atoms = dest_expr.atoms.len();
     // check the two operators
-    if src_expr.operator != dest_expr.operator {
+    if src_expr.operator != dest_expr.operator || src_expr.atoms.len() != dest_expr.atoms.len() {
         return None;
     }
-    // Match one-by-one (cannot compare lengths bc of things like '...' or generators)
-    let mut i = 0;
-    'main_loop: while i < num_src_atoms && i < num_dest_atoms {
+    'main_loop: for (atom_a, atom_b) in src_expr.atoms.iter().zip(dest_expr.atoms.iter()) {
         // compare atoms
-        let atom_a = &src_expr.atoms[i];
-        let atom_b = &dest_expr.atoms[i];
         match left_to_right_match(atom_a, atom_b) {
             (true, None) => (),
             (true, Some(par_mappings)) => {
@@ -385,7 +499,6 @@ fn atom_expressions_match(
                         }
                     }
                 }
-                i += 1;
                 continue 'main_loop;
             }
             (false, _) => return None,
@@ -401,10 +514,6 @@ fn atom_expressions_match(
             None => assert_eq!(mappings.insert(atom_b.clone(), atom_a.clone()), None),
         }
         // go to next (operator, atom) pair
-        i += 1;
-    }
-    if i != num_src_atoms || i != num_dest_atoms {
-        return None;
     }
     Some(mappings)
 }
@@ -493,14 +602,20 @@ fn left_to_right_match_sequential(
         return (false, None);
     }
     let mut seq_mappings: Atom2AtomHashMap = HashMap::new();
-    match left_to_right_match(&seq_expr_b.enumerator, &seq_expr_a.enumerator) {
+    match left_to_right_match(
+        &parenthesized_atom(seq_expr_b.enumerator.clone()),
+        &parenthesized_atom(seq_expr_a.enumerator.clone()),
+    ) {
         (false, _) => return (false, None),
         (true, Some(enum_mappings)) => {
             seq_mappings.extend(enum_mappings);
         }
         (true, None) => (),
     };
-    match left_to_right_match(&seq_expr_b.body, &seq_expr_a.body) {
+    match left_to_right_match(
+        &parenthesized_atom(seq_expr_b.body.clone()),
+        &parenthesized_atom(seq_expr_a.body.clone()),
+    ) {
         (false, _) => return (false, None),
         (true, Some(body_mappings)) => {
             seq_mappings.extend(body_mappings);
@@ -538,9 +653,12 @@ fn generate_new_expression(
 
         // normal mapping
         atoms.push(match atom_v {
-            Atom::Parenthesized(par_v) => {
-                parenthesized_atom(generate_new_expression(par_v, mappings, functions, associativities))
-            }
+            Atom::Parenthesized(par_v) => parenthesized_atom(generate_new_expression(
+                par_v,
+                mappings,
+                functions,
+                associativities,
+            )),
             Atom::Value(_) => match mappings.get(atom_v) {
                 Some(atom) => atom.clone(),
                 None => panic!(
@@ -563,10 +681,14 @@ fn generate_new_expression(
                 }
                 */
                 // function is not defined
-                Atom::FunctionCall((fn_name.clone(),
-                    call_args.iter().map(
-                        |arg_expr| generate_new_expression(arg_expr, mappings, functions, associativities)
-                    ).collect(),
+                Atom::FunctionCall((
+                    fn_name.clone(),
+                    call_args
+                        .iter()
+                        .map(|arg_expr| {
+                            generate_new_expression(arg_expr, mappings, functions, associativities)
+                        })
+                        .collect(),
                 ))
             }
             Atom::Sequential(seq) => generate_sequential(seq, mappings, functions, associativities),
@@ -591,19 +713,18 @@ fn generate_sequential(
     functions: &HashSet<AlgebraicFunction>,
     associativities: &AssociativityHashMap,
 ) -> Atom {
-    let mapped_enumerator = parenthesized_atom(generate_new_expression(
-        &atom2atom_expr(seq.enumerator.clone()),
+    let mapped_enumerator = generate_new_expression(
+        &seq.enumerator.clone(),
         mappings,
         functions,
         associativities,
-    ));
-    match &mapped_enumerator {
-        Atom::Special(n) if *n == 0 => Atom::Special(0),
-        Atom::Special(n) => {
-            let n_size = *n as usize;
+    );
+    match parenthesized_atom(mapped_enumerator.clone()) {
+        Atom::Special(n) if n != 0 => {
+            let n_size = n as usize;
             let mut atoms: Vec<Atom> = Vec::with_capacity(n_size);
             atoms.push(parenthesized_atom(generate_new_expression(
-                &atom2atom_expr(seq.body.clone()),
+                &seq.body.clone(),
                 mappings,
                 functions,
                 associativities,
@@ -615,7 +736,7 @@ fn generate_sequential(
                         .cycle()
                         .take(n_size)
                         .collect::<Vec<Atom>>(),
-                    operator: if *n == 1 {
+                    operator: if n == 1 {
                         None
                     } else {
                         Some(seq.operator.clone())
@@ -624,16 +745,12 @@ fn generate_sequential(
                 associativities,
             ))
         }
-        _ => Atom::Sequential(Box::new(SequentialExpr {
+        // this includes the case where the enumerator is '0'
+        _ => Atom::Sequential(SequentialExpr {
             operator: seq.operator.clone(),
             enumerator: mapped_enumerator,
-            body: parenthesized_atom(generate_new_expression(
-                &atom2atom_expr(seq.body.clone()),
-                mappings,
-                functions,
-                associativities,
-            )),
-        })),
+            body: generate_new_expression(&seq.body.clone(), mappings, functions, associativities),
+        }),
     }
 }
 

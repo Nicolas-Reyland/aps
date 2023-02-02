@@ -119,7 +119,9 @@ pub fn repl(context: ReplContext) {
             Command::new("settings")
                 .arg(Arg::new("param").required(true).num_args(1))
                 .arg(Arg::new("action").required(false).num_args(1))
-                .about("Print or set the auto-break, route-poc and expr-pretty-print (on/off/show)"),
+                .about(
+                    "Print or set the auto-break, route-poc and expr-pretty-print (on/off/show)",
+                ),
             settings_callback,
         )
         .with_command(
@@ -189,7 +191,8 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         Some(x) => x.as_str(),
         None => {
             return Ok(Some(
-                " usage: settings (auto-break/route-poc/expr-pretty-print) (on/off/show)".to_string(),
+                " usage: settings (auto-break/route-poc/expr-pretty-print) (on/off/show)"
+                    .to_string(),
             ))
         }
     };
@@ -232,7 +235,12 @@ fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         .unwrap()
         .parse::<u8>()?;
     for _ in 0..depth {
-        if !explore_graph(&mut graph, &context.properties, &context.functions, &context.associativities) {
+        if !explore_graph(
+            &mut graph,
+            &context.properties,
+            &context.functions,
+            &context.associativities,
+        ) {
             break;
         }
     }
@@ -316,7 +324,11 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
             }
             (
                 expr_str,
-                String::from(if *common && context.route_poc { " /!\\\t" } else { "\t" }),
+                String::from(if *common && context.route_poc {
+                    " /!\\\t"
+                } else {
+                    "\t"
+                }),
                 rule_str.clone(),
             )
         })

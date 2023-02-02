@@ -29,7 +29,7 @@ pub enum Atom {
     Value(String),
     Special(i32),
     FunctionCall((String, Vec<AtomExpr>)),
-    Sequential(Box<SequentialExpr>),
+    Sequential(SequentialExpr),
 }
 
 impl PartialEq for Atom {
@@ -154,8 +154,8 @@ impl fmt::Display for AtomExpr {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SequentialExpr {
     pub operator: Operator,
-    pub enumerator: Atom,
-    pub body: Atom,
+    pub enumerator: AtomExpr,
+    pub body: AtomExpr,
 }
 
 impl fmt::Display for SequentialExpr {
@@ -333,7 +333,7 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// sequential_expr : '#' sp op sp ':' sp atom sp ':' sp atom sp '#' sp
+/// sequential_expr : '#' sp op sp ':' sp atom_expr sp ':' sp atom_expr sp '#' sp
 pub fn sequential_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
@@ -345,19 +345,19 @@ pub fn sequential_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                 // '#' sp op
                 preceded(sp_terminated!(char_p('#')), op_p),
                 // sp ':' sp atom
-                preceded(sp_terminated!(sp_preceded!(char_p(':'))), atom_p),
+                preceded(sp_terminated!(sp_preceded!(char_p(':'))), atom_expr_p),
                 // sp ':' sp atom sp '#'
                 preceded(
                     sp_terminated!(sp_preceded!(char_p(':'))),
-                    terminated(atom_p, sp_preceded!(char_p('#'))),
+                    terminated(atom_expr_p, sp_preceded!(char_p('#'))),
                 ),
             ))),
             |(operator, enumerator, body)| {
-                Atom::Sequential(Box::new(SequentialExpr {
+                Atom::Sequential(SequentialExpr {
                     operator,
                     enumerator,
                     body,
-                }))
+                })
             },
         ),
     )(input)
@@ -432,7 +432,10 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 fn_name_p,
                 def_p,
-                separated_list1(sp_terminated!(sp_preceded!(char_p(','))), simple_atom_expr_p),
+                separated_list1(
+                    sp_terminated!(sp_preceded!(char_p(','))),
+                    simple_atom_expr_p,
+                ),
                 fn_def_symbol_p,
                 simple_atom_expr_p,
                 end_p,
