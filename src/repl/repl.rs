@@ -2,10 +2,10 @@
 
 use crate::explorer::strip_expr_naked;
 use crate::{
-    explorer::{atom2atom_expr, explore_graph, init_graph, print_graph_dot_format},
+    explorer::{explore_graph, init_graph, print_graph_dot_format},
     parser::{
         self, split_algebraic_objects, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap,
-        Atom, AtomExpr, KProperty,
+        Atom, KProperty,
     },
     preprocessor::read_and_preprocess_file,
     solution::solve_equality,
@@ -16,6 +16,7 @@ use reedline_repl_rs::{
     Repl, Result,
 };
 use std::collections::{HashMap, HashSet};
+use crate::parser::FunctionCallExpr;
 
 static TAB_WIDTH: usize = 8;
 
@@ -227,8 +228,8 @@ fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<S
 fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     // concat args of expression
     let expression_str = concat_args(args.get_many("expression").unwrap());
-    let expression = str2atom_expr(&expression_str);
-    let mut graph = init_graph(expression);
+    let atom = str2atom(&expression_str);
+    let mut graph = init_graph(atom);
     // number of explorations
     let depth = args
         .get_one::<String>("num explorations")
@@ -238,7 +239,6 @@ fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         if !explore_graph(
             &mut graph,
             &context.properties,
-            &context.functions,
             &context.associativities,
         ) {
             break;
@@ -282,11 +282,10 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
     // solve the equation
     let solution = match solve_equality(
         context.properties.clone(),
-        context.functions.clone(),
         context.k_properties.clone(),
         &context.associativities,
-        &property.atom_expr_left,
-        &property.atom_expr_right,
+        &property.left_atom,
+        &property.right_atom,
         context.auto_break,
     ) {
         Some(solution) => solution,
@@ -405,11 +404,11 @@ fn extend_context(
     context
         .properties
         .extend(functions.iter().map(|function| AlgebraicProperty {
-            atom_expr_left: atom2atom_expr(Atom::FunctionCall((
-                function.name.clone(),
-                function.atom_expr_args.clone(),
-            ))),
-            atom_expr_right: function.atom_expr_right.clone(),
+            left_atom: Atom::FunctionCall(FunctionCallExpr {
+                name: function.name.clone(),
+                args: function.arg_atoms.clone(),
+            }),
+            right_atom: function.value_atom.clone(),
         }));
 }
 fn concat_args(args: ValuesRef<String>) -> String {
@@ -421,13 +420,13 @@ fn concat_args(args: ValuesRef<String>) -> String {
     property_str
 }
 
-pub fn str2atom_expr(input: &str) -> AtomExpr {
-    match parser::atom_expr_p::<parser::ApsParserKind>(input) {
+pub fn str2atom(input: &str) -> Atom {
+    match parser::atom_p::<parser::ApsParserKind>(input) {
         Ok(("", expr)) => expr,
         Ok((rest, parsed)) => panic!(
-            " Failed to parse whole expression:\n'{}'\nParsed (expr) :\n{:#?}\n",
+            " Failed to parse entirety of atom:\nRest: <<{}>>\nParsed (expr) :\n{:#?}\n",
             rest, parsed
         ),
-        Err(err) => panic!(" Failed to parse expression:\n{:#?}", err),
+        Err(err) => panic!(" Failed to parse atom:\n{:#?}", err),
     }
 }

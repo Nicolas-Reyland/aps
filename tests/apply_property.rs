@@ -2,19 +2,6 @@
 use apsl_lang::{explorer::*, parser::*, repl::*};
 use std::collections::HashSet;
 
-macro_rules! parse_expr {
-    ($expression:expr) => {
-        match atom_expr_p::<ApsParserKind>($expression) {
-            Ok(("", expr)) => expr,
-            Ok((rest, parsed)) => panic!(
-                "Failed to parse expression:\n'{}'\nParsed :\n{:#?}\n",
-                rest, parsed,
-            ),
-            Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-        }
-    };
-}
-
 macro_rules! parse_property {
     ($expression:expr) => {
         match property_p::<ApsParserKind>($expression) {
@@ -30,17 +17,16 @@ macro_rules! parse_property {
 
 macro_rules! test_match {
     ($src_expr:expr, $property:expr, $expected:expr, $context:ident) => {
-        let src_expr = parse_expr!($src_expr);
+        let src_expr = str2atom($src_expr);
         let property = parse_property!($property);
         let actual = apply_property(
             &src_expr,
             &property,
-            &$context.functions,
             &$context.associativities,
         );
-        let expected: HashSet<AtomExpr> = $expected
+        let expected: HashSet<Atom> = $expected
             .iter()
-            .map(|expr_str| parse_expr!(expr_str))
+            .map(|expr_str| str2atom(expr_str))
             .collect();
         assert_eq!(
             actual.len(),

@@ -2,6 +2,7 @@
 use apsl_lang::explorer::*;
 use apsl_lang::parser::OperatorAssociativity::*;
 use apsl_lang::parser::*;
+use apsl_lang::repl::str2atom;
 use std::collections::HashMap;
 
 fn default_operators() -> AssociativityHashMap {
@@ -21,32 +22,18 @@ fn default_operators() -> AssociativityHashMap {
 // strip_naked / dress_up
 macro_rules! assert_eq_cloth {
     ($src_expression:expr, $dst_expression:expr, $f:ident, $operators:expr) => {
-        let source_expr = match atom_expr_p::<ApsParserKind>($src_expression) {
-            Ok(("", expr)) => expr,
-            Ok((rest, parsed)) => panic!(
-                "Failed to parse source:\n'{}'\nParsed :\n{:#?}\n",
-                rest, parsed,
-            ),
-            Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-        };
-        let destination_expr = match atom_expr_p::<ApsParserKind>($dst_expression) {
-            Ok(("", expr)) => expr,
-            Ok((rest, parsed)) => panic!(
-                "Failed to parse destination:\n'{}'\nParsed :\n{:#?}\n",
-                rest, parsed,
-            ),
-            Err(err) => panic!("Failed to parse expression:\n{:#?}", err),
-        };
-        let actual_expr = $f(&source_expr, $operators);
+        let source_atom = str2atom($src_expression);
+        let destination_atom = str2atom($dst_expression);
+        let actual_atom = $f(&source_atom, $operators);
         assert_eq!(
-            actual_expr,
-            destination_expr,
+            actual_atom,
+            destination_atom,
             "Assertion of cloth equality failed: {}(\"{}\") != \"{}\".\nLeft (actual): {}\nRight (expected): {}",
             stringify!($f),
             $src_expression,
             $dst_expression,
-            actual_expr,
-            destination_expr
+            actual_atom,
+            destination_atom
         );
     };
 }

@@ -12,24 +12,24 @@ fn brace_def() {
                 associativity: Some(NonAssociative),
                 properties: vec![
                     AlgebraicProperty {
-                        atom_expr_left: AtomExpr {
+                        left_atom: Atom::Parenthesized(AtomExpr {
                             atoms: vec![Atom::Symbol("A".to_string(),),],
                             operator: None,
-                        },
-                        atom_expr_right: AtomExpr {
+                        }),
+                        right_atom: Atom::Parenthesized(AtomExpr {
                             atoms: vec![Atom::Value(3,),],
                             operator: None,
-                        },
+                        }),
                     },
                     AlgebraicProperty {
-                        atom_expr_left: AtomExpr {
+                        left_atom: Atom::Parenthesized(AtomExpr {
                             atoms: vec![Atom::Symbol("B".to_string(),),],
                             operator: None,
-                        },
-                        atom_expr_right: AtomExpr {
+                        }),
+                        right_atom: Atom::Parenthesized(AtomExpr {
                             atoms: vec![Atom::Symbol("C".to_string(),),],
                             operator: None,
-                        },
+                        }),
                     },
                 ],
             },
@@ -40,19 +40,16 @@ fn brace_def() {
 #[test]
 fn fn_def() {
     assert_eq!(
-        fn_def_p::<ApsParserKind>("square :: A -> A ^ 2 ; "),
+        fn_def_p::<ApsParserKind>("pow :: A, N -> A ^ 2 ; "),
         Ok((
             "",
             AlgebraicFunction {
                 name: "square".to_string(),
-                atom_expr_args: vec![AtomExpr {
-                    atoms: vec![Atom::Symbol("A".to_string(),),],
-                    operator: None,
-                },],
-                atom_expr_right: AtomExpr {
+                arg_atoms: vec![Atom::Symbol("A".to_string(),),Atom::Symbol("N".to_string(),),],
+                value_atom: Atom::Parenthesized(AtomExpr {
                     atoms: vec![Atom::Symbol("A".to_string(),), Atom::Value(2,),],
                     operator: Some(Operator { op: '^' }),
-                },
+                }),
             },
         ),)
     )
@@ -66,14 +63,11 @@ fn fn_def_many_args() {
             "",
             AlgebraicFunction {
                 name: "square".to_string(),
-                atom_expr_args: vec![AtomExpr {
-                    atoms: vec![Atom::Symbol("A".to_string(),),],
-                    operator: None,
-                },],
-                atom_expr_right: AtomExpr {
+                arg_atoms: vec![Atom::Symbol("A".to_string(),),],
+                value_atom: Atom::Parenthesized(AtomExpr {
                     atoms: vec![Atom::Symbol("A".to_string(),), Atom::Value(2,),],
                     operator: Some(Operator { op: '^' }),
-                },
+                }),
             },
         ),)
     )

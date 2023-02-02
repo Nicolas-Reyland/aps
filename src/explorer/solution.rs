@@ -9,13 +9,12 @@ use std::{
 
 use crate::{
     explorer::{dress_up_expr, explore_graph, init_graph, strip_expr_naked, ExprGraph, ExprNode},
-    parser::{AlgebraicFunction, AlgebraicProperty, AssociativityHashMap, Atom, KProperty},
+    parser::{AlgebraicProperty, AssociativityHashMap, Atom, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
 
 pub fn solve_equality(
     properties: HashSet<AlgebraicProperty>,
-    functions: HashSet<AlgebraicFunction>,
     _k_properties: HashSet<KProperty>,
     associativities: &AssociativityHashMap,
     left_atom: &Atom,
@@ -51,9 +50,9 @@ pub fn solve_equality(
         }
         // explore the graphs once each
         let left_handle =
-            start_graph_exploration(&properties, &functions, &left_mutex, associativities);
+            start_graph_exploration(&properties, &left_mutex, associativities);
         let right_handle =
-            start_graph_exploration(&properties, &functions, &right_mutex, associativities);
+            start_graph_exploration(&properties, &right_mutex, associativities);
         let left_has_evolved = left_handle.join().unwrap();
         let right_has_evolved = right_handle.join().unwrap();
 
@@ -101,27 +100,24 @@ fn gather_nodes_from_graph(
         .nodes
         .into_iter()
         // .filter(|node| node.depth == depth || node.depth + 1 == depth)
-        .map(|node| (node.clone(), strip_expr_naked(&node.atom_expr, operators)))
+        .map(|node| (node.clone(), strip_expr_naked(&node.atom, operators)))
         .collect()
 }
 
 fn start_graph_exploration(
     properties: &HashSet<AlgebraicProperty>,
-    functions: &HashSet<AlgebraicFunction>,
     left_mutex: &Arc<Mutex<ExprGraph>>,
     associativities: &AssociativityHashMap,
 ) -> JoinHandle<bool> {
     // clone things
     let scoped_left_mutex_clone = Arc::clone(&left_mutex);
     let properties_clone = properties.clone();
-    let functions_clone = functions.clone();
     let associativities_clone = associativities.clone();
     // return thread
     thread::spawn(move || {
         explore_graph(
             &mut *scoped_left_mutex_clone.lock().unwrap(),
             &properties_clone,
-            &functions_clone,
             &associativities_clone,
         )
     })
@@ -147,26 +143,26 @@ fn find_route(
     let first_index = lnode.index;
     while lnode.index != 0 {
         lroute.push((
-            lnode.atom_expr.clone(),
+            lnode.atom.clone(),
             Some(lnode.transform.as_ref().unwrap().clone()),
             lnode.index == first_index,
         ));
         lnode = &left.nodes[lnode.parent];
     }
     // push base node
-    lroute.push((lnode.atom_expr.clone(), None, false));
+    lroute.push((lnode.atom.clone(), None, false));
     lroute.reverse(); // from common->base to base->common
                       // link base-node to common on the right
     let mut rroute: Vec<(Atom, Option<AlgebraicProperty>, bool)> = Vec::new();
     let mut rnode = rcommon;
     let mut next_transform: Option<AlgebraicProperty> = None;
     while rnode.index != 0 {
-        rroute.push((rnode.atom_expr.clone(), next_transform, false));
+        rroute.push((rnode.atom.clone(), next_transform, false));
         next_transform = Some(rnode.transform.as_ref().unwrap().clone());
         rnode = &right.nodes[rnode.parent];
     }
     // push the base
-    rroute.push((rnode.atom_expr.clone(), next_transform, false));
+    rroute.push((rnode.atom.clone(), next_transform, false));
     // add all the left route
     route.append(&mut lroute);
     // remove the common element from the right route (or we'll have it twice)

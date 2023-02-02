@@ -53,13 +53,7 @@ impl fmt::Display for Atom {
             Atom::Parenthesized(x) => write!(f, "({})", x),
             Atom::Symbol(x) => write!(f, "{}", x),
             Atom::Value(x) => write!(f, "{}", x),
-            Atom::FunctionCall((name, args)) => {
-                write!(f, "{}({}", name, args.first().unwrap())?;
-                for arg in args.iter().skip(1) {
-                    write!(f, ", {}", arg)?;
-                }
-                write!(f, ")")
-            }
+            Atom::FunctionCall(x) => write!(f, "{}", x),
             Atom::Sequential(x) => write!(f, "{}", x),
         }
     }
@@ -206,7 +200,7 @@ pub struct AlgebraicProperty {
 
 impl fmt::Display for AlgebraicProperty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} = {}", self.atom_expr_left, self.atom_expr_right)
+        write!(f, "{} = {}", self.left_atom, self.right_atom)
     }
 }
 
@@ -223,12 +217,12 @@ impl fmt::Display for AlgebraicFunction {
             f,
             "{} :: {}",
             self.name,
-            self.atom_expr_args.first().unwrap()
+            self.arg_atoms.first().unwrap()
         )?;
-        for left_expr in self.atom_expr_args.iter().skip(1) {
-            write!(f, ", {}", left_expr)?;
+        for arg_atom in self.arg_atoms.iter().skip(1) {
+            write!(f, ", {}", arg_atom)?;
         }
-        write!(f, " -> {}", self.atom_expr_right)
+        write!(f, " -> {}", self.value_atom)
     }
 }
 
@@ -513,7 +507,7 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
 }
 
 /// atom : atom_symbol | special_symbol | parenthesized_atom_expr | fn_call | sequential_expr
-fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+pub(crate) fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
     context(
@@ -595,7 +589,7 @@ fn atom_expr_end_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
 
 /// atom_expr : big_atom (op big_atom)*
 /// NOW: equivalent to simple_atom_expr
-pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AtomExpr, E> {
     context(
