@@ -1,11 +1,11 @@
 Todo List :
-- optimize everything
-- write new parsing tests (once new grammar is worked out)
-- only iterate over  graph "outer layer" (doesn't seem to work somehow)
-- reverse-match simple expressions to sequential expressions
-  e.g. "A * A * A" matched to "# * : N : A #"
-- atom values can be more than one char long
-- add real operator priority, where "2 * A + 3" would be legal
+- general: optimize everything
+- tests: write new parsing tests (once new grammar is worked out)
+- solution: only iterate over  graph "outer layer" (doesn't seem to work somehow)
+- expr-matching: reverse-match simple expressions to sequential expressions
+  e.g. "(A * A) * A" matched to "# * : N : A #", and generates "# * : 3 : A #"
+- parser: atom values can be longer than one char
+- parser: add real operator priority, where "2 * A + 3" would be legal
   and would be translated to "(2 * A) + 3" if '*' happened to have a higher
   priority than '+'
-- ability to re-print last proof (after settings expr-pretty-print <action>)
+- repl: ability to re-print last proof (after settings expr-pretty-print <action>)
