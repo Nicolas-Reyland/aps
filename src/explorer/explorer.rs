@@ -97,6 +97,7 @@ pub fn explore_graph(
     graph: &mut ExprGraph,
     properties: &HashSet<AlgebraicProperty>,
     functions: &HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
 ) -> bool {
     // apply every property to all the outer-layer nodes of the graph
     let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
@@ -136,12 +137,13 @@ pub fn explore_graph(
                 let atom_expr_clone = node.atom_expr.clone();
                 let property_clone = property.clone();
                 let functions_clone = functions.clone();
+                let associativities_clone = associativities.clone();
                 let node_index = node.index;
                 thread::spawn(move || {
                     (
                         property_clone.clone(),
                         node_index,
-                        apply_property(&atom_expr_clone, &property_clone, &functions_clone),
+                        apply_property(&atom_expr_clone, &property_clone, &functions_clone, &associativities_clone),
                     )
                 })
             });
@@ -237,18 +239,21 @@ pub fn apply_property(
     src_expr: &AtomExpr,
     property: &AlgebraicProperty,
     functions: &HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
 ) -> Vec<AtomExpr> {
     let mut new_expressions = match_and_apply(
         src_expr,
         &property.atom_expr_left,
         &property.atom_expr_right,
         functions,
+        associativities,
     );
     new_expressions.extend(match_and_apply(
         src_expr,
         &property.atom_expr_right,
         &property.atom_expr_left,
         functions,
+        associativities,
     ));
     new_expressions
 }
@@ -262,13 +267,14 @@ fn match_and_apply(
     left: &AtomExpr,
     right: &AtomExpr,
     functions: &HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
 ) -> Vec<AtomExpr> {
     // call 'atom_expressions_match' on every expression (src_expr and sub-expression in parentheses)
     let mut new_expressions: Vec<AtomExpr> = Vec::new();
     // base call on src_expr
     match atom_expressions_match(src, left) {
         Some(mappings) => {
-            let new_expr = generate_new_expression(right, &mappings, &functions);
+            let new_expr = generate_new_expression(right, &mappings, &functions, associativities);
             new_expressions.push(new_expr);
         }
         None => (),
@@ -284,7 +290,7 @@ fn match_and_apply(
         })
     {
         new_expressions.extend(
-            match_and_apply(&sub, left, right, functions)
+            match_and_apply(&sub, left, right, functions, associativities)
                 .iter()
                 .map(|sub_tr| {
                     // reconstruct like that : <everything b4> (new sub) <everything after>
@@ -319,7 +325,7 @@ fn match_and_apply(
         .flatten()
     {
         new_expressions.extend(
-            match_and_apply(&sub, left, right, functions)
+            match_and_apply(&sub, left, right, functions, associativities)
                 .iter()
                 .map(|new_arg| {
                     // reconstruct like that : <everything b4> func(<args b4> (new arg) <args after>) <everything after>
@@ -517,6 +523,7 @@ fn generate_new_expression(
     v_expr: &AtomExpr,
     mappings: &Atom2AtomHashMap,
     functions: &&HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
 ) -> AtomExpr {
     // init new atoms and operator
     let mut atoms: Vec<Atom> = Vec::new();
@@ -532,7 +539,7 @@ fn generate_new_expression(
         // normal mapping
         atoms.push(match atom_v {
             Atom::Parenthesized(par_v) => {
-                parenthesized_atom(generate_new_expression(par_v, mappings, functions))
+                parenthesized_atom(generate_new_expression(par_v, mappings, functions, associativities))
             }
             Atom::Value(_) => match mappings.get(atom_v) {
                 Some(atom) => atom.clone(),
@@ -549,6 +556,7 @@ fn generate_new_expression(
                             &function.atom_expr_right,
                             mappings,
                             functions,
+                            associativities,
                         );
                     }
                 }
@@ -558,7 +566,7 @@ fn generate_new_expression(
                     fn_name, functions
                 )
             }
-            Atom::Sequential(seq) => generate_sequential(seq, mappings, functions),
+            Atom::Sequential(seq) => generate_sequential(seq, mappings, functions, associativities),
         });
 
         i += 1;
@@ -578,11 +586,13 @@ fn generate_sequential(
     seq: &SequentialExpr,
     mappings: &Atom2AtomHashMap,
     functions: &&HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
 ) -> Atom {
     let mapped_enumerator = parenthesized_atom(generate_new_expression(
         &atom2atom_expr(seq.enumerator.clone()),
         mappings,
         functions,
+        associativities,
     ));
     match &mapped_enumerator {
         Atom::Special(n) if *n == 0 => Atom::Special(0),
@@ -593,19 +603,23 @@ fn generate_sequential(
                 &atom2atom_expr(seq.body.clone()),
                 mappings,
                 functions,
+                associativities,
             )));
-            parenthesized_atom(AtomExpr {
-                atoms: atoms
-                    .into_iter()
-                    .cycle()
-                    .take(n_size)
-                    .collect::<Vec<Atom>>(),
-                operator: if *n == 1 {
-                    None
-                } else {
-                    Some(seq.operator.clone())
+            parenthesized_atom(dress_up_expr(
+                &AtomExpr {
+                    atoms: atoms
+                        .into_iter()
+                        .cycle()
+                        .take(n_size)
+                        .collect::<Vec<Atom>>(),
+                    operator: if *n == 1 {
+                        None
+                    } else {
+                        Some(seq.operator.clone())
+                    },
                 },
-            })
+                associativities,
+            ))
         }
         _ => Atom::Sequential(Box::new(SequentialExpr {
             operator: seq.operator.clone(),
@@ -614,6 +628,7 @@ fn generate_sequential(
                 &atom2atom_expr(seq.body.clone()),
                 mappings,
                 functions,
+                associativities,
             )),
         })),
     }

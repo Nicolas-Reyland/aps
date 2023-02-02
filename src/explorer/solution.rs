@@ -50,8 +50,8 @@ pub fn solve_equality(
             }
         }
         // explore the graphs once each
-        let left_handle = start_graph_exploration(&properties, &functions, &left_mutex);
-        let right_handle = start_graph_exploration(&properties, &functions, &right_mutex);
+        let left_handle = start_graph_exploration(&properties, &functions, &left_mutex, associativities);
+        let right_handle = start_graph_exploration(&properties, &functions, &right_mutex, associativities);
         let left_has_evolved = left_handle.join().unwrap();
         let right_has_evolved = right_handle.join().unwrap();
 
@@ -107,17 +107,20 @@ fn start_graph_exploration(
     properties: &HashSet<AlgebraicProperty>,
     functions: &HashSet<AlgebraicFunction>,
     left_mutex: &Arc<Mutex<ExprGraph>>,
+    associativities: &AssociativityHashMap,
 ) -> JoinHandle<bool> {
     // clone things
     let scoped_left_mutex_clone = Arc::clone(&left_mutex);
     let properties_clone = properties.clone();
     let functions_clone = functions.clone();
+    let associativities_clone = associativities.clone();
     // return thread
     thread::spawn(move || {
         explore_graph(
             &mut *scoped_left_mutex_clone.lock().unwrap(),
             &properties_clone,
             &functions_clone,
+            &associativities_clone,
         )
     })
 }

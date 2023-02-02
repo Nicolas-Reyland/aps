@@ -228,7 +228,7 @@ fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         .unwrap()
         .parse::<u8>()?;
     for _ in 0..depth {
-        if !explore_graph(&mut graph, &context.properties, &context.functions) {
+        if !explore_graph(&mut graph, &context.properties, &context.functions, &context.associativities) {
             break;
         }
     }
