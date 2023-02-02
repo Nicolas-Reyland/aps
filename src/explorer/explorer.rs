@@ -486,8 +486,8 @@ fn atom_expressions_match(
     'main_loop: for (atom_a, atom_b) in src_expr.atoms.iter().zip(dest_expr.atoms.iter()) {
         // compare atoms
         match left_to_right_match(atom_a, atom_b) {
-            (true, None) => (),
-            (true, Some(par_mappings)) => {
+            Some(None) => (),
+            Some(Some(par_mappings)) => {
                 for (key, value) in par_mappings {
                     match mappings.insert(key, value.clone()) {
                         None => (),
@@ -501,7 +501,7 @@ fn atom_expressions_match(
                 }
                 continue 'main_loop;
             }
-            (false, _) => return None,
+            None => return None,
         }
         // check with already-existing mapping, or insert as new mapping
         match mappings.get(atom_b) {
@@ -527,27 +527,26 @@ fn atom_expressions_match(
 /// limitation to overcome : the left part of 'A = 1 * A' (just 'A')
 /// is not seen as mappable to anything else than another lone atom.
 /// An expression should be mappable too, e.g. 'A + B = 1 * (A + B)'
-///
-/// TODO: convert the return type to Result<Option<A...>>, or Option<Option<A...>>
-fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomHashMap>) {
+fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> Option<Option<Atom2AtomHashMap>> {
     // we match the second atom !!
     match atom_b {
         Atom::Parenthesized(par_b) => match atom_a {
             Atom::Parenthesized(par_a) => match atom_expressions_match(par_a, par_b) {
-                Some(par_mappings) => (true, Some(par_mappings)),
-                None => (false, None),
+                Some(par_mappings) => Some(Some(par_mappings)),
+                None => None,
             },
-            _ => (false, None),
+            _ => None,
         },
-        Atom::Value(_) => (true, None),
-        Atom::Special(_) => (atom_a == atom_b, None),
+        Atom::Value(_) => Some(None),
+        Atom::Special(_) if atom_a == atom_b => Some(None),
+        Atom::Special(_) => None,
         Atom::FunctionCall((fn_name_b, fn_expr_args_b)) => match atom_a {
             // a function call is only mappable to the same function call, with each argument
             // being mappable to it's alter-atom
             Atom::FunctionCall((fn_name_a, fn_expr_args_a)) => {
                 // It should be the same function (by name and number of arguments)
                 if fn_name_b != fn_name_a || fn_expr_args_b.len() != fn_expr_args_a.len() {
-                    return (false, None);
+                    return None;
                 }
                 // check 'mappability' of each argument
                 let mut fn_mappings: Atom2AtomHashMap = HashMap::new();
@@ -572,24 +571,24 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
                                         // W ^ 2 mapped to A
                                         // 2 * Z mapped to B
                                         if old_arg_value != arg_value {
-                                            return (false, None);
+                                            return None;
                                         }
                                     }
                                     _ => (),
                                 }
                             }
                         }
-                        None => return (false, None),
+                        None => return None,
                     }
                 }
                 // arguments are all mappable
-                (true, Some(fn_mappings))
+                Some(Some(fn_mappings))
             }
-            _ => (false, None),
+            _ => None,
         },
         Atom::Sequential(seq_expr_b) => match atom_a {
             Atom::Sequential(seq_expr_a) => left_to_right_match_sequential(seq_expr_b, seq_expr_a),
-            _ => (false, None),
+            _ => None,
         },
     }
 }
@@ -597,38 +596,37 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
 fn left_to_right_match_sequential(
     seq_expr_b: &SequentialExpr,
     seq_expr_a: &SequentialExpr,
-) -> (bool, Option<Atom2AtomHashMap>) {
+) -> Option<Option<Atom2AtomHashMap>> {
     if seq_expr_b.operator != seq_expr_a.operator {
-        return (false, None);
+        return None;
     }
     let mut seq_mappings: Atom2AtomHashMap = HashMap::new();
     match left_to_right_match(
         &parenthesized_atom(seq_expr_b.enumerator.clone()),
         &parenthesized_atom(seq_expr_a.enumerator.clone()),
     ) {
-        (false, _) => return (false, None),
-        (true, Some(enum_mappings)) => {
+        None => return None,
+        Some(Some(enum_mappings)) => {
             seq_mappings.extend(enum_mappings);
         }
-        (true, None) => (),
+        Some(None) => (),
     };
     match left_to_right_match(
         &parenthesized_atom(seq_expr_b.body.clone()),
         &parenthesized_atom(seq_expr_a.body.clone()),
     ) {
-        (false, _) => return (false, None),
-        (true, Some(body_mappings)) => {
+        None => return None,
+        Some(Some(body_mappings)) => {
             seq_mappings.extend(body_mappings);
         }
-        (true, None) => (),
+        Some(None) => (),
     };
-    (
-        true,
+    Some(
         if seq_mappings.is_empty() {
             None
         } else {
             Some(seq_mappings)
-        },
+        }
     )
 }
 
