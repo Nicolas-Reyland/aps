@@ -67,7 +67,7 @@ impl fmt::Display for Atom {
 
 pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
     if expr.atoms.len() == 1 {
-        return expr.atoms[0].clone();
+        return expr.atoms.first().unwrap().clone();
     }
     Atom::Parenthesized(expr)
 }
@@ -432,10 +432,7 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 fn_name_p,
                 def_p,
-                separated_list1(
-                    sp_terminated!(sp_preceded!(char_p(','))),
-                    atom_expr_p,
-                ),
+                separated_list1(sp_terminated!(sp_preceded!(char_p(','))), atom_expr_p),
                 fn_def_symbol_p,
                 atom_expr_p,
                 end_p,

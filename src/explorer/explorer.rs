@@ -215,15 +215,17 @@ fn print_node_dot_format(node: &ExprNode) -> String {
     content.push_str(&format!("\"];\n"));
 
     // start printing neighbours
-    content.push_str(&format!(
-        "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
-        node.parent,
-        node.index,
-        match &node.transform {
-            Some(x) => x.to_string(),
-            None => "?".to_string(),
-        },
-    ));
+    if node.index != 0 || node.transform != None {
+        content.push_str(&format!(
+            "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
+            node.parent,
+            node.index,
+            match &node.transform {
+                Some(x) => x.to_string(),
+                None => "?".to_string(),
+            },
+        ));
+    }
     content.push_str("\n");
     content
 }
@@ -532,6 +534,13 @@ fn generate_new_expression(
             Atom::Parenthesized(par_v) => {
                 parenthesized_atom(generate_new_expression(par_v, mappings, functions))
             }
+            Atom::Value(_) => match mappings.get(atom_v) {
+                Some(atom) => atom.clone(),
+                None => panic!(
+                    "Could not find mapping for atom {} in expr '{}'\nMappings :\n{:#?}\n",
+                    atom_v, v_expr, mappings
+                ),
+            },
             Atom::Special(_) => atom_v.clone(),
             Atom::FunctionCall((fn_name, _)) => {
                 for function in *functions {
@@ -549,63 +558,65 @@ fn generate_new_expression(
                     fn_name, functions
                 )
             }
-            Atom::Sequential(seq) => {
-                todo!("Sequential expressions not done yet: {}", seq)
-            }
-            /*
-            Atom::Generator(gen_expr) => {
-                todo!("Generator expressions not handled yet");
-                // check for iterator (must be a numeral, or we can't generate)
-                let num_iterations = match mappings.get(&gen_expr.iterator) {
-                    Some(Either::Left(Atom::Special(c))) => c.to_digit(10),
-                    _ => panic!("Iterator value was not a special value for generator expression.\natom_v: {atom_v}, expr_v: {v_expr}\nMappings :{:#?}\n", mappings),
-                }.unwrap();
-                // remove the special operator ('{' or '}')
-                if ! operators.is_empty() {
-                    if operators.last().unwrap().op == '}' {
-                        operators.pop().unwrap();
-                    } else {
-                        // should not be added (guard at beginning of the loop)
-                        assert_eq!(v_expr.operators[i - 1].op, '{');
-                    }
-                }
-                // get mappings for the atoms inside the generator-expression
-                let vec_capacity = gen_expr.elements.len() / 2;
-                let mut mapped_atoms: Vec<Atom> = Vec::with_capacity(vec_capacity);
-                let mut gen_operator: Option<Operator> = None;
-                for gen_element in &gen_expr.elements {
-                    match gen_element {
-                        GeneratorElement::GenAtom(atom) => {
-                            match mappings.get(atom) {
-                                Some(Either::Left(atom)) => mapped_atoms.push((*atom).clone()),
-                                Some(Either::Right(atom_expr)) => mapped_atoms.push(parenthesized_atom((*atom_expr).clone())),
-                                None => panic!("Could not find mapping for gen-element {}", gen_element),
-                            }
-                        },
-                        GeneratorElement::GenOperator(op) => gen_operators.push((*op).clone()),
-                    }
-                }
-                // generate part of the expression
-                operator = gen_operator;
-                for _ in 0..num_iterations {
-                    atoms.extend(mapped_atoms.clone());
-                }
-                i += num_iterations as usize;
-                continue 'main_loop;
-            }
-            */
-            _ => match mappings.get(atom_v) {
-                Some(atom) => atom.clone(),
-                None => panic!(
-                    "Could not find mapping for atom {} in expr '{}'\nMappings :\n{:#?}\n",
-                    atom_v, v_expr, mappings
-                ),
-            },
+            Atom::Sequential(seq) => generate_sequential(seq, mappings, functions),
         });
 
         i += 1;
     }
+
+    // Yes, this is needed (since sequential expressions)
+    if atoms.len() == 1 {
+        match atoms.first().unwrap() {
+            Atom::Parenthesized(expr) => return expr.clone(),
+            _ => (),
+        }
+    }
     AtomExpr { atoms, operator }
+}
+
+fn generate_sequential(
+    seq: &SequentialExpr,
+    mappings: &Atom2AtomHashMap,
+    functions: &&HashSet<AlgebraicFunction>,
+) -> Atom {
+    let mapped_enumerator = parenthesized_atom(generate_new_expression(
+        &atom2atom_expr(seq.enumerator.clone()),
+        mappings,
+        functions,
+    ));
+    match &mapped_enumerator {
+        Atom::Special(n) if *n == 0 => Atom::Special(0),
+        Atom::Special(n) => {
+            let n_size = *n as usize;
+            let mut atoms: Vec<Atom> = Vec::with_capacity(n_size);
+            atoms.push(parenthesized_atom(generate_new_expression(
+                &atom2atom_expr(seq.body.clone()),
+                mappings,
+                functions,
+            )));
+            parenthesized_atom(AtomExpr {
+                atoms: atoms
+                    .into_iter()
+                    .cycle()
+                    .take(n_size)
+                    .collect::<Vec<Atom>>(),
+                operator: if *n == 1 {
+                    None
+                } else {
+                    Some(seq.operator.clone())
+                },
+            })
+        }
+        _ => Atom::Sequential(Box::new(SequentialExpr {
+            operator: seq.operator.clone(),
+            enumerator: mapped_enumerator,
+            body: parenthesized_atom(generate_new_expression(
+                &atom2atom_expr(seq.body.clone()),
+                mappings,
+                functions,
+            )),
+        })),
+    }
 }
 
 /// Strips the expression naked.
