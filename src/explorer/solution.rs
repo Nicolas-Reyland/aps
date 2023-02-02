@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     explorer::{dress_up_expr, explore_graph, init_graph, strip_expr_naked, ExprGraph, ExprNode},
-    parser::{AlgebraicFunction, AlgebraicProperty, AssociativityHashMap, AtomExpr, KProperty},
+    parser::{AlgebraicFunction, AlgebraicProperty, AssociativityHashMap, Atom, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
 
@@ -18,23 +18,23 @@ pub fn solve_equality(
     functions: HashSet<AlgebraicFunction>,
     _k_properties: HashSet<KProperty>,
     associativities: &AssociativityHashMap,
-    left_expression: &AtomExpr,
-    right_expression: &AtomExpr,
+    left_atom: &Atom,
+    right_atom: &Atom,
     auto_break: bool,
-) -> Option<Vec<(AtomExpr, Option<AlgebraicProperty>, bool)>> {
+) -> Option<Vec<(Atom, Option<AlgebraicProperty>, bool)>> {
     // dress both expressions
     // left graph
-    let left = init_graph(dress_up_expr(left_expression, associativities));
+    let left = init_graph(dress_up_expr(left_atom, associativities));
     let left_mutex = Arc::new(Mutex::new(left));
     // right graph
-    let right = init_graph(dress_up_expr(right_expression, associativities));
+    let right = init_graph(dress_up_expr(right_atom, associativities));
     let right_mutex = Arc::new(Mutex::new(right));
     // number of explorations
     let mut depth: usize = 0;
     loop {
-        let lnodes: Vec<(ExprNode, AtomExpr)> =
+        let lnodes: Vec<(ExprNode, Atom)> =
             gather_nodes_from_graph(&left_mutex, associativities, depth as u8);
-        let rnodes: Vec<(ExprNode, AtomExpr)> =
+        let rnodes: Vec<(ExprNode, Atom)> =
             gather_nodes_from_graph(&right_mutex, associativities, depth as u8);
         // look for a common element
         for (lnode, naked_lexpr) in lnodes {
@@ -94,7 +94,7 @@ fn gather_nodes_from_graph(
     left_mutex: &Arc<Mutex<ExprGraph>>,
     operators: &AssociativityHashMap,
     _depth: u8,
-) -> Vec<(ExprNode, AtomExpr)> {
+) -> Vec<(ExprNode, Atom)> {
     let mutex_clone = Arc::clone(&left_mutex);
     let clone = (*mutex_clone.lock().unwrap()).clone();
     clone
@@ -138,11 +138,11 @@ fn find_route(
     right: &ExprGraph,
     lcommon: &ExprNode,
     rcommon: &ExprNode,
-) -> Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> {
+) -> Vec<(Atom, Option<AlgebraicProperty>, bool)> {
     // final route
-    let mut route: Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> = Vec::new();
+    let mut route: Vec<(Atom, Option<AlgebraicProperty>, bool)> = Vec::new();
     // link base-node to common on the left
-    let mut lroute: Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> = Vec::new();
+    let mut lroute: Vec<(Atom, Option<AlgebraicProperty>, bool)> = Vec::new();
     let mut lnode = lcommon;
     let first_index = lnode.index;
     while lnode.index != 0 {
@@ -157,7 +157,7 @@ fn find_route(
     lroute.push((lnode.atom_expr.clone(), None, false));
     lroute.reverse(); // from common->base to base->common
                       // link base-node to common on the right
-    let mut rroute: Vec<(AtomExpr, Option<AlgebraicProperty>, bool)> = Vec::new();
+    let mut rroute: Vec<(Atom, Option<AlgebraicProperty>, bool)> = Vec::new();
     let mut rnode = rcommon;
     let mut next_transform: Option<AlgebraicProperty> = None;
     while rnode.index != 0 {

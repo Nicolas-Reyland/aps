@@ -2,9 +2,9 @@ use apsl_lang::parser::OperatorAssociativity::NonAssociative;
 use apsl_lang::parser::*;
 
 #[test]
-fn test_brace_def_p() {
+fn brace_def() {
     assert_eq!(
-        brace_def_p::<ApsParserKind>("+ n :: { A = A ; B = C ; } "),
+        brace_def_p::<ApsParserKind>("+ n :: { A = 3 ; B = C ; } "),
         Ok((
             "",
             BraceGroup {
@@ -17,7 +17,7 @@ fn test_brace_def_p() {
                             operator: None,
                         },
                         atom_expr_right: AtomExpr {
-                            atoms: vec![Atom::Symbol("A".to_string(),),],
+                            atoms: vec![Atom::Value(3,),],
                             operator: None,
                         },
                     },
@@ -38,7 +38,7 @@ fn test_brace_def_p() {
 }
 
 #[test]
-fn test_fn_def_p() {
+fn fn_def() {
     assert_eq!(
         fn_def_p::<ApsParserKind>("square :: A -> A ^ 2 ; "),
         Ok((
@@ -50,7 +50,7 @@ fn test_fn_def_p() {
                     operator: None,
                 },],
                 atom_expr_right: AtomExpr {
-                    atoms: vec![Atom::Symbol("A".to_string(),), Atom::Special(2,),],
+                    atoms: vec![Atom::Symbol("A".to_string(),), Atom::Value(2,),],
                     operator: Some(Operator { op: '^' }),
                 },
             },
@@ -59,7 +59,28 @@ fn test_fn_def_p() {
 }
 
 #[test]
-fn test_k_def_p() {
+fn fn_def_many_args() {
+    assert_eq!(
+        fn_def_p::<ApsParserKind>("square :: A -> A ^ 2 ; "),
+        Ok((
+            "",
+            AlgebraicFunction {
+                name: "square".to_string(),
+                atom_expr_args: vec![AtomExpr {
+                    atoms: vec![Atom::Symbol("A".to_string(),),],
+                    operator: None,
+                },],
+                atom_expr_right: AtomExpr {
+                    atoms: vec![Atom::Symbol("A".to_string(),), Atom::Value(2,),],
+                    operator: Some(Operator { op: '^' }),
+                },
+            },
+        ),)
+    )
+}
+
+#[test]
+fn k_def() {
     assert_eq!(
         k_def_p::<ApsParserKind>("K :: ?N5 ; "),
         Ok((
@@ -74,18 +95,18 @@ fn test_k_def_p() {
 }
 
 #[test]
-fn test_fn_call_p() {
+fn fn_call() {
     assert_eq!(
         fn_call_p::<ApsParserKind>("exp(A ^ 2) "),
         Ok((
             "",
-            Atom::FunctionCall((
-                "exp".to_string(),
-                vec![AtomExpr {
-                    atoms: vec![Atom::Symbol("A".to_string(),), Atom::Special(2,),],
+            Atom::FunctionCall(FunctionCallExpr {
+                name: "exp".to_string(),
+                args: vec![Atom::Parenthesized(AtomExpr {
+                    atoms: vec![Atom::Symbol("A".to_string(),), Atom::Value(2,),],
                     operator: Some(Operator { op: '^' }),
-                },],
-            ))
+                }),],
+            })
         ))
     )
 }

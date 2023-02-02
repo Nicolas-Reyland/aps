@@ -27,9 +27,9 @@ pub type AssociativityHashMap = HashMap<char, OperatorAssociativity>;
 pub enum Atom {
     Parenthesized(AtomExpr),
     Symbol(String),
-    Special(i32),
-    FunctionCall((String, Vec<AtomExpr>)),
-    Sequential(SequentialExpr),
+    Value(i32),
+    FunctionCall(FunctionCallExpr),
+    Sequential(Box<SequentialExpr>),
 }
 
 impl PartialEq for Atom {
@@ -37,7 +37,7 @@ impl PartialEq for Atom {
         match (self, other) {
             (Self::Parenthesized(expr_a), Self::Parenthesized(expr_b)) => expr_a == expr_b,
             (Self::Symbol(val_a), Self::Symbol(val_b)) => val_a == val_b,
-            (Self::Special(spe_a), Self::Special(spe_b)) => spe_a == spe_b,
+            (Self::Value(spe_a), Self::Value(spe_b)) => spe_a == spe_b,
             (Self::FunctionCall(fn_call_a), Self::FunctionCall(fn_call_b)) => {
                 fn_call_a == fn_call_b
             }
@@ -52,7 +52,7 @@ impl fmt::Display for Atom {
         match self {
             Atom::Parenthesized(x) => write!(f, "({})", x),
             Atom::Symbol(x) => write!(f, "{}", x),
-            Atom::Special(x) => write!(f, "{}", x),
+            Atom::Value(x) => write!(f, "{}", x),
             Atom::FunctionCall((name, args)) => {
                 write!(f, "{}({}", name, args.first().unwrap())?;
                 for arg in args.iter().skip(1) {
@@ -151,11 +151,33 @@ impl fmt::Display for AtomExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct FunctionCallExpr {
+    pub name: String,
+    pub args: Vec<Atom>,
+}
+
+impl fmt::Display for FunctionCallExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}(", self.name)?;
+        match self.args.first() {
+            Some(arg) => {
+                write!(f, "{}", arg)?;
+                for next_arg in self.args.iter().skip(1) {
+                    write!(f, ", {}", next_arg)?;
+                }
+            }
+            None => (),
+        }
+        write!(f, ")")
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct SequentialExpr {
     pub operator: Operator,
-    pub enumerator: AtomExpr,
-    pub body: AtomExpr,
+    pub enumerator: Atom,
+    pub body: Atom,
 }
 
 impl fmt::Display for SequentialExpr {
@@ -168,18 +190,18 @@ impl fmt::Display for SequentialExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct BraceGroup {
     pub operator: Operator,
     pub associativity: Option<OperatorAssociativity>,
     pub properties: Vec<AlgebraicProperty>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AlgebraicProperty {
-    pub atom_expr_left: AtomExpr,
-    pub atom_expr_right: AtomExpr,
-    // relation: Relation (=, <=>, =>, >, <, ...)
+    pub left_atom: Atom,
+    pub right_atom: Atom,
+    // do relation: Relation (=, <=>, =>, >, <, ...) ?
 }
 
 impl fmt::Display for AlgebraicProperty {
@@ -188,11 +210,11 @@ impl fmt::Display for AlgebraicProperty {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AlgebraicFunction {
     pub name: String,
-    pub atom_expr_args: Vec<AtomExpr>,
-    pub atom_expr_right: AtomExpr,
+    pub arg_atoms: Vec<Atom>,
+    pub value_atom: Atom,
 }
 
 impl fmt::Display for AlgebraicFunction {
@@ -210,7 +232,7 @@ impl fmt::Display for AlgebraicFunction {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct KProperty {
     pub undefined_property: bool,
     pub base: char,
@@ -290,7 +312,7 @@ fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str,
 fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
         sp_terminated!(many1(map(satisfy(|c: char| c.is_numeric()), |c: char| c))),
-        |s| Atom::Special(s.into_iter().collect::<String>().parse().unwrap()),
+        |s| Atom::Value(s.into_iter().collect::<String>().parse().unwrap()),
     )(input)
 }
 
@@ -307,7 +329,7 @@ fn parenthesized_atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>
     )(input)
 }
 
-/// fn_call_p : fn_name '(' sp atom_expr (sp ',' sp atom_expr)* sp ')' sp
+/// fn_call_p : fn_name '(' sp atom (sp ',' sp atom)* sp ')' sp
 pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
@@ -322,13 +344,18 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                         separated_list1(
                             // separator
                             sp_preceded!(sp_terminated!(char_p(','))),
-                            atom_expr_p
+                            atom_p
                         ),
                         sp_preceded!(char_p(')'))
                     )
                 )
             ))),
-            |(fn_name, args)| Atom::FunctionCall((fn_name.to_string(), args)),
+            |(fn_name, args)| {
+                Atom::FunctionCall(FunctionCallExpr {
+                    name: fn_name.to_string(),
+                    args,
+                })
+            },
         ),
     )(input)
 }
@@ -345,19 +372,19 @@ pub fn sequential_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                 // '#' sp op
                 preceded(sp_terminated!(char_p('#')), op_p),
                 // sp ':' sp atom
-                preceded(sp_terminated!(sp_preceded!(char_p(':'))), atom_expr_p),
+                preceded(sp_terminated!(sp_preceded!(char_p(':'))), atom_p),
                 // sp ':' sp atom sp '#'
                 preceded(
                     sp_terminated!(sp_preceded!(char_p(':'))),
-                    terminated(atom_expr_p, sp_preceded!(char_p('#'))),
+                    terminated(atom_p, sp_preceded!(char_p('#'))),
                 ),
             ))),
             |(operator, enumerator, body)| {
-                Atom::Sequential(SequentialExpr {
+                Atom::Sequential(Box::new(SequentialExpr {
                     operator,
                     enumerator,
                     body,
-                })
+                }))
             },
         ),
     )(input)
@@ -422,7 +449,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// fn_def : fn_name def atom_expr (sp ',' sp atom_expr) fn_def atom_expr end
+/// fn_def : fn_name def (atom (sp ',' sp atom)) fn_def atom end
 pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AlgebraicFunction, E> {
@@ -432,18 +459,15 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 fn_name_p,
                 def_p,
-                separated_list1(
-                    sp_terminated!(sp_preceded!(char_p(','))),
-                    simple_atom_expr_p,
-                ),
+                separated_list1(sp_terminated!(sp_preceded!(char_p(','))), atom_p),
                 fn_def_symbol_p,
-                simple_atom_expr_p,
+                atom_p,
                 end_p,
             )),
-            |(name, _, atom_expr_args, _, atom_expr_right, _)| AlgebraicFunction {
+            |(name, _, arg_atoms, _, value_atom, _)| AlgebraicFunction {
                 name: name.to_owned(),
-                atom_expr_args,
-                atom_expr_right,
+                arg_atoms,
+                value_atom,
             },
         ),
     )(input)
@@ -636,17 +660,17 @@ fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     context("property list", many0(sp_terminated!(property_p)))(input)
 }
 
-/// property : atom_expr_p equ atom_expr_p end
+/// property : atom equ atom end
 pub fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AlgebraicProperty, E> {
     context(
         "property",
         map(
-            tuple((atom_expr_p, equ_p, atom_expr_p, end_p)),
-            |(atom_expr_left, _, atom_expr_right, _)| AlgebraicProperty {
-                atom_expr_left,
-                atom_expr_right,
+            tuple((atom_p, equ_p, atom_p, end_p)),
+            |(left_atom, _, right_atom, _)| AlgebraicProperty {
+                left_atom,
+                right_atom,
             },
         ),
     )(input)
