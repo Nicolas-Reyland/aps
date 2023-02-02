@@ -26,7 +26,7 @@ pub type AssociativityHashMap = HashMap<char, OperatorAssociativity>;
 #[derive(Debug, Clone, Hash, Eq)]
 pub enum Atom {
     Parenthesized(AtomExpr),
-    Value(String),
+    Symbol(String),
     Special(i32),
     FunctionCall((String, Vec<AtomExpr>)),
     Sequential(SequentialExpr),
@@ -36,7 +36,7 @@ impl PartialEq for Atom {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Parenthesized(expr_a), Self::Parenthesized(expr_b)) => expr_a == expr_b,
-            (Self::Value(val_a), Self::Value(val_b)) => val_a == val_b,
+            (Self::Symbol(val_a), Self::Symbol(val_b)) => val_a == val_b,
             (Self::Special(spe_a), Self::Special(spe_b)) => spe_a == spe_b,
             (Self::FunctionCall(fn_call_a), Self::FunctionCall(fn_call_b)) => {
                 fn_call_a == fn_call_b
@@ -51,7 +51,7 @@ impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Atom::Parenthesized(x) => write!(f, "({})", x),
-            Atom::Value(x) => write!(f, "{}", x),
+            Atom::Symbol(x) => write!(f, "{}", x),
             Atom::Special(x) => write!(f, "{}", x),
             Atom::FunctionCall((name, args)) => {
                 write!(f, "{}({}", name, args.first().unwrap())?;
@@ -282,7 +282,7 @@ fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i st
 fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     sp_terminated!(map(
         satisfy(|c| c.is_alphabetic() && c.is_uppercase()),
-        |c| Atom::Value(String::from(c))
+        |c| Atom::Symbol(String::from(c))
     ))(input)
 }
 

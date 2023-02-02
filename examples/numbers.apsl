@@ -9,8 +9,8 @@ K :: R ;
 _ :: {
     // Distributivity
     A * (B + C) = (A * B) + (A * C) ;
-    // Times two
+    // Times two (todo: eventually replace this by a generator)
     A * 2 = A + A ;
-    // Power of two
-    A ^ 2 = A * A ;
 }
+
+// in repl: prove (A + B) ^ 2 = (A ^ 2) + (2 * A * B) + (B ^ 2)
