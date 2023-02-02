@@ -1,7 +1,7 @@
 #[cfg(test)]
-use crate::explorer::*;
-use crate::parser::OperatorAssociativity::*;
-use crate::parser::*;
+use apsl_lang::explorer::*;
+use apsl_lang::parser::OperatorAssociativity::*;
+use apsl_lang::parser::*;
 use std::collections::HashMap;
 
 fn default_operators() -> AssociativityHashMap {

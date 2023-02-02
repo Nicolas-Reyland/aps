@@ -1,6 +1,6 @@
-use crate::parser::OperatorAssociativity::{NonAssociative, Unknown};
+use apsl_lang::parser::OperatorAssociativity::NonAssociative;
 #[cfg(test)]
-use crate::parser::*;
+use apsl_lang::parser::*;
 
 #[test]
 fn test_brace_def_p() {
