@@ -522,7 +522,7 @@ fn left_to_right_match_sequential(
 fn generate_new_expression(
     v_expr: &AtomExpr,
     mappings: &Atom2AtomHashMap,
-    functions: &&HashSet<AlgebraicFunction>,
+    functions: &HashSet<AlgebraicFunction>,
     associativities: &AssociativityHashMap,
 ) -> AtomExpr {
     // init new atoms and operator
@@ -549,8 +549,9 @@ fn generate_new_expression(
                 ),
             },
             Atom::Special(_) => atom_v.clone(),
-            Atom::FunctionCall((fn_name, _)) => {
-                for function in *functions {
+            Atom::FunctionCall((fn_name, call_args)) => {
+                /* this step is actually one exploration further
+                for function in functions {
                     if function.name == *fn_name {
                         return generate_new_expression(
                             &function.atom_expr_right,
@@ -560,11 +561,13 @@ fn generate_new_expression(
                         );
                     }
                 }
+                */
                 // function is not defined
-                panic!(
-                    "No function named \"{}\"\nFunctions :\n{:?}",
-                    fn_name, functions
-                )
+                Atom::FunctionCall((fn_name.clone(),
+                    call_args.iter().map(
+                        |arg_expr| generate_new_expression(arg_expr, mappings, functions, associativities)
+                    ).collect(),
+                ))
             }
             Atom::Sequential(seq) => generate_sequential(seq, mappings, functions, associativities),
         });
@@ -585,7 +588,7 @@ fn generate_new_expression(
 fn generate_sequential(
     seq: &SequentialExpr,
     mappings: &Atom2AtomHashMap,
-    functions: &&HashSet<AlgebraicFunction>,
+    functions: &HashSet<AlgebraicFunction>,
     associativities: &AssociativityHashMap,
 ) -> Atom {
     let mapped_enumerator = parenthesized_atom(generate_new_expression(

@@ -25,8 +25,9 @@ pub struct ReplContext {
     pub functions: HashSet<AlgebraicFunction>,
     pub k_properties: HashSet<KProperty>,
     pub associativities: AssociativityHashMap,
-    pub pretty_print_steps: bool,
     pub auto_break: bool,
+    pub pretty_print_steps: bool,
+    pub route_poc: bool,
 }
 
 pub fn init_context() -> ReplContext {
@@ -35,8 +36,9 @@ pub fn init_context() -> ReplContext {
         functions: HashSet::new(),
         k_properties: HashSet::new(),
         associativities: HashMap::new(),
-        pretty_print_steps: true,
         auto_break: true,
+        pretty_print_steps: true,
+        route_poc: false,
     }
 }
 
@@ -45,8 +47,9 @@ fn reset_context(context: &mut ReplContext) {
     context.functions.clear();
     context.k_properties.clear();
     context.associativities.clear();
-    context.pretty_print_steps = true;
     context.auto_break = true;
+    context.pretty_print_steps = true;
+    context.route_poc = false;
 }
 
 // used in settings_callback
@@ -116,7 +119,7 @@ pub fn repl(context: ReplContext) {
             Command::new("settings")
                 .arg(Arg::new("param").required(true).num_args(1))
                 .arg(Arg::new("action").required(false).num_args(1))
-                .about("Print or set the auto-break and expr-pretty-print (on/off/show)"),
+                .about("Print or set the auto-break, route-poc and expr-pretty-print (on/off/show)"),
             settings_callback,
         )
         .with_command(
@@ -186,7 +189,7 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         Some(x) => x.as_str(),
         None => {
             return Ok(Some(
-                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+                " usage: settings (auto-break/route-poc/expr-pretty-print) (on/off/show)".to_string(),
             ))
         }
     };
@@ -197,6 +200,7 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
     match param_name {
         "auto-break" => handle_setting!(context.auto_break, action_name, param_name),
         "expr-pretty-print" => handle_setting!(context.pretty_print_steps, action_name, param_name),
+        "route-poc" => handle_setting!(context.route_poc, action_name, param_name),
         _ => {
             return Ok(Some(
                 " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
@@ -210,7 +214,7 @@ fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<S
     let objects = split_algebraic_objects(match parser::root::<parser::ApsParserKind>(&body_str) {
         Ok(("", objects)) => objects,
         Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
-        Err(err) => return Ok(Some(format!(" Error occurred while parsing :{}\n", err))),
+        Err(err) => return Ok(Some(format!(" Error occurred while parsing :\n{}", err))),
     });
     // extend context
     extend_context(objects, context);
@@ -312,7 +316,7 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
             }
             (
                 expr_str,
-                String::from(if *common { " /!\\\t" } else { "\t" }),
+                String::from(if *common && context.route_poc { " /!\\\t" } else { "\t" }),
                 rule_str.clone(),
             )
         })
