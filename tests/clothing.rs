@@ -1,5 +1,5 @@
 #[cfg(test)]
-use apsl_lang::explorer::*;
+use apsl_lang::clothing::*;
 use apsl_lang::parser::OperatorAssociativity::*;
 use apsl_lang::parser::*;
 use apsl_lang::repl::str2atom;

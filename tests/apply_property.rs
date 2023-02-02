@@ -100,3 +100,16 @@ fn apply_property_into_sequential() {
         context
     );
 }
+
+#[test]
+fn apply_property_ambiguity() {
+    let mut context = init_context();
+    import_into_context(&mut context, "examples/plus.apsl");
+    // fn-call args
+    test_match!(
+        "A + B",
+        "A = A * 1 ;",
+        vec!["(A * 1) + B", "A + (B * 1)",],
+        context
+    );
+}
