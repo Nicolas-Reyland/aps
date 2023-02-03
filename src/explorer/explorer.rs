@@ -265,17 +265,18 @@ pub fn match_and_apply(
     // call 'atom_expressions_match' on every expression (src_expr and sub-expression in parentheses)
     let mut new_atoms: HashSet<Atom> = HashSet::new();
     // base call on src
-    match left_to_right_match(src, left, associativities) {
+    let empty_mappings: Atom2AtomHashMap = HashMap::new();
+    match &left_to_right_match(src, left, associativities) {
         // use right atom as-is
-        Some(None) => {
+        Some(None) if sufficient_mappings(right, &empty_mappings) => {
             new_atoms.insert(right.clone());
             ()
         }
         // need to generate new atom, based on right atom
-        Some(Some(mappings)) => {
-            new_atoms.insert(generate_atom(right, &mappings, associativities));
+        Some(Some(mappings)) if sufficient_mappings(right, mappings) => {
+            new_atoms.insert(generate_atom(right, mappings, associativities));
         }
-        None => (),
+        _ => (),
     };
     // recursively call 'match_and_apply' on all sorts of sub-expressions
     // these are: expressions, function-call-args
@@ -669,6 +670,27 @@ fn left_to_right_match_sequentials(
     } else {
         Some(seq_mappings)
     })
+}
+
+/// Make sure the mappings contain all the symbols that can be found in the scheme
+/// That prevents atoms such as "0" to generate an atom "A * 0" ('A' is not `connu au bataillon`)
+fn sufficient_mappings(scheme: &Atom, mappings: &Atom2AtomHashMap) -> bool {
+    match scheme {
+        Atom::Parenthesized(expr) => expr
+            .atoms
+            .iter()
+            .all(|sub_atom| sufficient_mappings(sub_atom, mappings)),
+        Atom::Symbol(_) => mappings.contains_key(scheme),
+        Atom::Value(_) => true,
+        Atom::FunctionCall(fn_call) => fn_call
+            .args
+            .iter()
+            .all(|arg| sufficient_mappings(arg, mappings)),
+        Atom::Sequential(seq) => {
+            sufficient_mappings(&seq.enumerator, mappings)
+                && sufficient_mappings(&seq.body, mappings)
+        }
+    }
 }
 
 pub fn atom2atom_expr(atom: Atom) -> AtomExpr {

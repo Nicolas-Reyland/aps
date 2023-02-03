@@ -1,7 +1,7 @@
 use crate::{clothing::dress_up_expr, explorer::*, parser::*};
 
-/// Generate new expression using source, value-expression and mappings
-/// mappings matches atom-names from the source-expression to the ones in the value-expression (and vice-versa)
+/// Generate new expression using scheme and mappings
+/// mappings matches atoms (only symbols) from the source to the ones in the value-expression
 pub fn generate_atom(
     scheme: &Atom,
     mappings: &Atom2AtomHashMap,
