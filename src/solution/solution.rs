@@ -7,8 +7,9 @@ use std::{
     thread,
 };
 
+use crate::clothing::{dress_up_expr, strip_expr_naked};
 use crate::{
-    explorer::{dress_up_expr, explore_graph, init_graph, strip_expr_naked, ExprGraph, ExprNode},
+    explorer::{explore_graph, init_graph, ExprGraph, ExprNode},
     parser::{AlgebraicProperty, AssociativityHashMap, Atom, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };

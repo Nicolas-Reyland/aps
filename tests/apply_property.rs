@@ -1,6 +1,21 @@
+use apsl_lang::parser::OperatorAssociativity::*;
 #[cfg(test)]
 use apsl_lang::{explorer::*, parser::*, repl::*};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+
+fn default_associativities() -> AssociativityHashMap {
+    let mut hash_map: AssociativityHashMap = HashMap::with_capacity(5);
+    for (k, v) in vec![
+        ('+', Unknown),
+        ('*', LeftAssociative),
+        ('^', RightAssociative),
+        ('@', LeftRightAssociative),
+        ('-', NonAssociative),
+    ] {
+        hash_map.insert(k, v);
+    }
+    hash_map
+}
 
 macro_rules! parse_property {
     ($expression:expr) => {
@@ -15,11 +30,21 @@ macro_rules! parse_property {
     };
 }
 
-macro_rules! test_match {
-    ($src_expr:expr, $property:expr, $expected:expr, $context:ident) => {
+macro_rules! show_atom_iterable {
+    ($atoms:expr) => {{
+        let mut s = String::new();
+        for atom in $atoms {
+            s.push_str(&format!(" - {}\n", atom));
+        }
+        s
+    }};
+}
+
+macro_rules! assert_eq_property_appliance {
+    ($src_expr:expr, $property:expr, $expected:expr) => {
         let src_expr = str2atom($src_expr);
         let property = parse_property!($property);
-        let actual = apply_property(&src_expr, &property, &$context.associativities);
+        let actual = apply_property(&src_expr, &property, &default_associativities());
         let expected: HashSet<Atom> = $expected
             .iter()
             .map(|expr_str| str2atom(expr_str))
@@ -27,76 +52,135 @@ macro_rules! test_match {
         assert_eq!(
             actual.len(),
             expected.len(),
-            "lengths differ (actual != expected): {} != {}\nActual: {:#?}\nExpected: {:#?}",
+            "lengths differ (actual != expected): {} != {}\nActual:\n{}Expected:\n{}",
             actual.len(),
             expected.len(),
-            actual,
-            expected,
+            show_atom_iterable!(actual),
+            show_atom_iterable!(expected)
         );
         assert_eq!(
-            actual, expected,
-            "HashSets differ\nActual: {:#?}\nExpected: {:#?}",
-            actual, expected,
+            actual.clone(),
+            expected.clone(),
+            "HashSets differ\nActual:\n{}Expected:\n{}",
+            show_atom_iterable!(actual),
+            show_atom_iterable!(expected)
+        );
+    };
+}
+
+macro_rules! assert_eq_match_and_apply {
+    ($src_expr:expr, $property:expr, $expected:expr) => {
+        let src_expr = str2atom($src_expr);
+        let property = parse_property!($property);
+        let actual = match_and_apply(
+            &src_expr,
+            &property.left_atom,
+            &property.right_atom,
+            &default_associativities(),
+        );
+        let expected: HashSet<Atom> = $expected
+            .iter()
+            .map(|expr_str| str2atom(expr_str))
+            .collect();
+        assert_eq!(
+            actual.len(),
+            expected.len(),
+            "lengths differ (actual != expected): {} != {}\nActual:\n{}Expected:\n{}",
+            actual.len(),
+            expected.len(),
+            show_atom_iterable!(actual),
+            show_atom_iterable!(expected)
+        );
+        assert_eq!(
+            actual.clone(),
+            expected.clone(),
+            "HashSets differ\nActual:\n{}Expected:\n{}",
+            show_atom_iterable!(actual),
+            show_atom_iterable!(expected)
         );
     };
 }
 
 #[test]
-fn apply_property_basic() {
-    let mut context = init_context();
-    import_into_context(&mut context, "examples/plus.apsl");
+fn match_and_apply_basic() {
     // Most basic case, no edge-cases
-    test_match!("A + B", "A + B = B + A ;", vec!["B + A",], context);
+    assert_eq_match_and_apply!("A + B", "A + B = B + A ;", vec!["B + A",]);
 }
 
 #[test]
-fn apply_property_sub_expression() {
-    let mut context = init_context();
-    import_into_context(&mut context, "examples/plus.apsl");
+fn match_and_apply_sub_expression() {
     // Sub-expression
-    test_match!(
-        "(A + B) * C",
-        "A + B = B + A ;",
-        vec!["(B + A) * C",],
-        context
-    );
+    assert_eq_match_and_apply!("(A + B) * C", "A + B = B + A ;", vec!["(B + A) * C",]);
 }
 
 #[test]
-fn apply_property_fn_call_args() {
-    let mut context = init_context();
-    import_into_context(&mut context, "examples/plus.apsl");
+fn match_and_apply_fn_call_args() {
     // fn-call args
-    test_match!(
+    assert_eq_match_and_apply!(
         "f(A + B, C + D)",
         "A + B = B + A ;",
-        vec!["f(B + A, C + D)", "f(A + B, D + C)",],
-        context
+        vec!["f(B + A, C + D)", "f(A + B, D + C)",]
     );
 }
 
 #[test]
-fn apply_property_sequential() {
-    let mut context = init_context();
-    import_into_context(&mut context, "examples/plus.apsl");
+fn match_and_apply_ambiguity() {
     // fn-call args
-    test_match!(
+    assert_eq_match_and_apply!(
+        "A + B",
+        "A = A * 1 ;",
+        vec!["(A * 1) + B", "A + (B * 1)", "(A + B) * 1",]
+    );
+}
+
+#[test]
+fn match_and_apply_sequential() {
+    // fn-call args
+    assert_eq_match_and_apply!(
         "# + : 4 : A + B #",
         "A + B = B + A ;",
-        vec!["# + : 4 : B + A #",],
-        context
+        vec!["# + : 4 : B + A #",]
+    );
+}
+
+#[test]
+fn match_and_apply_into_sequential() {
+    // fn-call args
+    assert_eq_match_and_apply!(
+        "(X * X) * X",
+        "# * : N : A # = A ^ N ;",
+        vec![
+            "(X ^ 2) * X",
+            "(X ^ 3)",
+            "((X ^ 1) * X) * X",
+            "(X * (X ^ 1)) * X",
+            "(X * X) * (X ^ 1)",
+        ]
+    );
+}
+
+#[test]
+fn apply_property_ambiguity() {
+    // fn-call args
+    assert_eq_property_appliance!(
+        "A + B",
+        "A = A * 1 ;",
+        vec!["(A * 1) + B", "A + (B * 1)", "(A + B) * 1",]
     );
 }
 
 #[test]
 fn apply_property_into_sequential() {
-    let mut context = init_context();
-    import_into_context(&mut context, "examples/plus.apsl");
     // fn-call args
-    test_match!(
+    assert_eq_property_appliance!(
         "(X * X) * X",
         "A ^ N = # * : N : A # ;",
-        vec!["# * : 3 : X #",],
-        context
+        vec![
+            "(X ^ 2) * X",
+            "(X ^ 3)",
+            "((X ^ 1) * X) * X",
+            "(X * (X ^ 1)) * X",
+            "(X * X) * (X ^ 1)",
+        ]
     );
 }
