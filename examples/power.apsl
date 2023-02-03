@@ -1,8 +1,8 @@
 ^ r :: {
     // Null element
     A ^ 0 = 1 ;
-    // Identity element
-    A ^ 1 = A ;
+    // Sequential definition
+    A ^ N = # * : N : A # ;
 }
 
 _ :: {

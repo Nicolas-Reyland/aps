@@ -26,26 +26,24 @@ pub type AssociativityHashMap = HashMap<char, OperatorAssociativity>;
 #[derive(Debug, Clone, Hash, Eq)]
 pub enum Atom {
     Parenthesized(AtomExpr),
-    Value(String),
-    Special(i32),
-    FunctionCall((String, Vec<AtomExpr>)),
+    Symbol(String),
+    Value(i32),
+    FunctionCall(FunctionCallExpr),
+    Sequential(Box<SequentialExpr>),
 }
 
 impl PartialEq for Atom {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Parenthesized(expr_a), Self::Parenthesized(expr_b)) => expr_a == expr_b,
-            (Self::Value(val_a), Self::Value(val_b)) => val_a == val_b,
-            (Self::Special(spe_a), Self::Special(spe_b)) => spe_a == spe_b,
+            (Self::Symbol(val_a), Self::Symbol(val_b)) => val_a == val_b,
+            (Self::Value(spe_a), Self::Value(spe_b)) => spe_a == spe_b,
             (Self::FunctionCall(fn_call_a), Self::FunctionCall(fn_call_b)) => {
                 fn_call_a == fn_call_b
             }
+            (Self::Sequential(seq_a), Self::Sequential(seq_b)) => seq_a == seq_b,
             _ => false,
         }
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
     }
 }
 
@@ -53,22 +51,17 @@ impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Atom::Parenthesized(x) => write!(f, "({})", x),
+            Atom::Symbol(x) => write!(f, "{}", x),
             Atom::Value(x) => write!(f, "{}", x),
-            Atom::Special(x) => write!(f, "{}", x),
-            Atom::FunctionCall((name, args)) => {
-                write!(f, "{}({}", name, args.first().unwrap())?;
-                for arg in args.iter().skip(1) {
-                    write!(f, ", {}", arg)?;
-                }
-                write!(f, ")")
-            }
+            Atom::FunctionCall(x) => write!(f, "{}", x),
+            Atom::Sequential(x) => write!(f, "{}", x),
         }
     }
 }
 
 pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
     if expr.atoms.len() == 1 {
-        return expr.atoms[0].clone();
+        return expr.atoms.first().unwrap().clone();
     }
     Atom::Parenthesized(expr)
 }
@@ -76,7 +69,6 @@ pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
 #[derive(Debug, Clone, Hash, Eq)]
 pub struct Operator {
     pub op: char,
-    pub associativity: OperatorAssociativity,
 }
 
 impl fmt::Display for Operator {
@@ -88,9 +80,6 @@ impl fmt::Display for Operator {
 impl PartialEq for Operator {
     fn eq(&self, other: &Self) -> bool {
         self.op == other.op
-    }
-    fn ne(&self, other: &Self) -> bool {
-        !(self == other)
     }
 }
 
@@ -156,48 +145,83 @@ impl fmt::Display for AtomExpr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct FunctionCallExpr {
+    pub name: String,
+    pub args: Vec<Atom>,
+}
+
+impl fmt::Display for FunctionCallExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}(", self.name)?;
+        match self.args.first() {
+            Some(arg) => {
+                write!(f, "{}", arg)?;
+                for next_arg in self.args.iter().skip(1) {
+                    write!(f, ", {}", next_arg)?;
+                }
+            }
+            None => (),
+        }
+        write!(f, ")")
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+pub struct SequentialExpr {
+    pub operator: Operator,
+    pub enumerator: Atom,
+    pub body: Atom,
+}
+
+impl fmt::Display for SequentialExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "# {} : {} : {} #",
+            self.operator, self.enumerator, self.body
+        )
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct BraceGroup {
     pub operator: Operator,
+    pub associativity: Option<OperatorAssociativity>,
     pub properties: Vec<AlgebraicProperty>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AlgebraicProperty {
-    pub atom_expr_left: AtomExpr,
-    pub atom_expr_right: AtomExpr,
-    // relation: Relation (=, <=>, =>, >, <, ...)
+    pub left_atom: Atom,
+    pub right_atom: Atom,
+    // do relation: Relation (=, <=>, =>, >, <, ...) ?
 }
 
 impl fmt::Display for AlgebraicProperty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} = {}", self.atom_expr_left, self.atom_expr_right)
+        write!(f, "{} = {}", self.left_atom, self.right_atom)
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AlgebraicFunction {
     pub name: String,
-    pub atom_expr_args: Vec<AtomExpr>,
-    pub atom_expr_right: AtomExpr,
+    pub arg_atoms: Vec<Atom>,
+    pub value_atom: Atom,
 }
 
 impl fmt::Display for AlgebraicFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} :: {}",
-            self.name,
-            self.atom_expr_args.first().unwrap()
-        )?;
-        for left_expr in self.atom_expr_args.iter().skip(1) {
-            write!(f, ", {}", left_expr)?;
+        write!(f, "{} :: {}", self.name, self.arg_atoms.first().unwrap())?;
+        for arg_atom in self.arg_atoms.iter().skip(1) {
+            write!(f, ", {}", arg_atom)?;
         }
-        write!(f, " -> {}", self.atom_expr_right)
+        write!(f, " -> {}", self.value_atom)
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct KProperty {
     pub undefined_property: bool,
     pub base: char,
@@ -243,11 +267,8 @@ fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str,
 }
 
 /// op : [+-*/@^$%] sp
-fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
-    map(sp_terminated!(one_of("+-*/@^$%")), |op_c| Operator {
-        op: op_c,
-        associativity: Unknown,
-    })(input)
+pub fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
+    map(sp_terminated!(one_of("+-*/@^$%")), |op| Operator { op })(input)
 }
 
 /// fn_name : [a-z_][a-z0-9_] sp
@@ -269,35 +290,38 @@ fn fn_def_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i st
 }
 
 /// atom_symbol : [A-Z] sp
-fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
+pub fn atom_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     sp_terminated!(map(
         satisfy(|c| c.is_alphabetic() && c.is_uppercase()),
-        |c| Atom::Value(String::from(c))
+        |c| Atom::Symbol(String::from(c))
     ))(input)
 }
 
 /// special_symbol : [0-9]+ sp
-fn special_symbol_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
+pub fn atom_value_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Atom, E> {
     map(
         sp_terminated!(many1(map(satisfy(|c: char| c.is_numeric()), |c: char| c))),
-        |s| Atom::Special(s.into_iter().collect::<String>().parse().unwrap()),
+        |s| Atom::Value(s.into_iter().collect::<String>().parse().unwrap()),
     )(input)
 }
 
-/// parenthesized_atom : '(' atom_expr ')' sp
-fn parenthesized_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+/// parenthesized_atom : '(' sp atom_expr sp ')' sp
+fn parenthesized_atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
     context(
         "parenthesized atom",
         map(
-            sp_terminated!(preceded(char_p('('), terminated(atom_expr_p, char_p(')')))),
+            sp_terminated!(preceded(
+                sp_terminated!(char_p('(')),
+                terminated(atom_expr_p, char_p(')'))
+            )),
             parenthesized_atom,
         ),
     )(input)
 }
 
-/// fn_call_p : fn_name '(' sp atom_expr (sp ',' sp atom_expr)* sp ')' sp
+/// fn_call_p : fn_name '(' sp toplevel_atom (sp ',' sp toplevel_atom)* sp ')' sp
 pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
@@ -312,13 +336,48 @@ pub fn fn_call_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                         separated_list1(
                             // separator
                             sp_preceded!(sp_terminated!(char_p(','))),
-                            atom_expr_p
+                            toplevel_atom_p
                         ),
                         sp_preceded!(char_p(')'))
                     )
                 )
             ))),
-            |(fn_name, args)| Atom::FunctionCall((fn_name.to_string(), args)),
+            |(fn_name, args)| {
+                Atom::FunctionCall(FunctionCallExpr {
+                    name: fn_name.to_string(),
+                    args,
+                })
+            },
+        ),
+    )(input)
+}
+
+/// sequential_expr : '#' sp op sp ':' sp toplevel_atom sp ':' sp toplevel_atom sp '#' sp
+pub fn sequential_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str,
+) -> IResult<&'i str, Atom, E> {
+    context(
+        "sequential expr",
+        // ... sp
+        map(
+            sp_terminated!(tuple((
+                // '#' sp op
+                preceded(sp_terminated!(char_p('#')), op_p),
+                // sp ':' sp atom
+                preceded(sp_terminated!(sp_preceded!(char_p(':'))), toplevel_atom_p),
+                // sp ':' sp atom sp '#'
+                preceded(
+                    sp_terminated!(sp_preceded!(char_p(':'))),
+                    terminated(toplevel_atom_p, sp_preceded!(char_p('#'))),
+                ),
+            ))),
+            |(operator, enumerator, body)| {
+                Atom::Sequential(Box::new(SequentialExpr {
+                    operator,
+                    enumerator,
+                    body,
+                }))
+            },
         ),
     )(input)
 }
@@ -360,10 +419,7 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 alt((
                     op_p,
-                    sp_terminated!(map(satisfy(|c| c == '_'), |op| Operator {
-                        op,
-                        associativity: Unknown,
-                    })),
+                    sp_terminated!(map(satisfy(|c| c == '_'), |op| Operator { op })),
                 )),
                 opt(sp_terminated!(alt((
                     map(alt((tag("lr"), tag("rl"),)), |_| LeftRightAssociative,),
@@ -376,21 +432,16 @@ pub fn brace_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
                 property_list_p,
                 sp_terminated!(char_p('}')),
             )),
-            |(operator, op_ass, _, _, properties, _)| BraceGroup {
-                operator: match op_ass {
-                    Some(associativity) if operator.op != '_' => Operator {
-                        op: operator.op,
-                        associativity,
-                    },
-                    _ => operator,
-                },
+            |(operator, associativity, _, _, properties, _)| BraceGroup {
+                operator,
+                associativity,
                 properties,
             },
         ),
     )(input)
 }
 
-/// fn_def : fn_name def simple_atom_expr (sp ',' sp simple_atom_expr) fn_def atom_expr end
+/// fn_def : fn_name def (toplevel_atom (sp ',' sp toplevel_atom)) fn_def toplevel_atom end
 pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AlgebraicFunction, E> {
@@ -400,18 +451,15 @@ pub fn fn_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
             tuple((
                 fn_name_p,
                 def_p,
-                separated_list1(
-                    sp_terminated!(sp_preceded!(char_p(','))),
-                    simple_atom_expr_p,
-                ),
+                separated_list1(sp_terminated!(sp_preceded!(char_p(','))), toplevel_atom_p),
                 fn_def_symbol_p,
-                atom_expr_p,
+                toplevel_atom_p,
                 end_p,
             )),
-            |(name, _, atom_expr_args, _, atom_expr_right, _)| AlgebraicFunction {
+            |(name, _, arg_atoms, _, value_atom, _)| AlgebraicFunction {
                 name: name.to_owned(),
-                atom_expr_args,
-                atom_expr_right,
+                arg_atoms,
+                value_atom,
             },
         ),
     )(input)
@@ -456,124 +504,39 @@ pub fn k_def_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     )(input)
 }
 
-/// atom : atom_symbol | special_symbol | parenthesized_atom | fn_call_p
-///
-/// not parsing generator_expr because it actually represents 'atom op' or 'op atom'.
-/// parsing it in atom_expr tho
-fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+/// atom : atom_symbol | special_symbol | parenthesized_atom_expr | fn_call | sequential_expr
+pub fn atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, Atom, E> {
     context(
         "atom",
         alt((
             atom_symbol_p,
-            special_symbol_p,
-            parenthesized_atom_p,
+            atom_value_p,
+            parenthesized_atom_expr_p,
             fn_call_p,
+            sequential_expr_p,
         )),
     )(input)
 }
 
-/// big_atom : atom_expr_start* atom atom_expr_end*
-fn big_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+/// toplevel_atom : atom_expr | atom
+/// used for contexts where there is no ambiguity with parentheses
+pub fn toplevel_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
-) -> IResult<&'i str, (Vec<Atom>, Option<Operator>), E> {
+) -> IResult<&'i str, Atom, E> {
     context(
-        "big atom",
-        map(
-            tuple((
-                many0(atom_expr_start_p::<E>),
-                atom_p,
-                many0(atom_expr_end_p::<E>),
-            )),
-            |(starts, middle, ends)| {
-                let mut atoms: Vec<Atom> = Vec::new();
-                let mut operator: Option<Operator> = None;
-                // stick the vectors together
-                for (atom, op) in starts.clone() {
-                    atoms.push(atom);
-                    if operator == None {
-                        operator = Some(op);
-                    } else if operator != Some(op.clone()) {
-                        panic!(
-                            "Two types of operators in the same AtomExpr {:?} and {:?} in {:?}",
-                            operator,
-                            op.clone(),
-                            starts
-                        );
-                    }
-                }
-                atoms.push(middle);
-                for (op, atom) in ends.clone() {
-                    atoms.push(atom);
-                    if operator == None {
-                        operator = Some(op);
-                    } else if operator != Some(op.clone()) {
-                        panic!(
-                            "Two types of operators in the same AtomExpr {:?} and {:?} in {:?}",
-                            operator,
-                            op.clone(),
-                            ends
-                        );
-                    }
-                }
-                (atoms, operator)
-            },
-        ),
+        "toplevel atom",
+        alt((map(atom_expr_p, parenthesized_atom), atom_p)),
     )(input)
 }
 
-/// atom_expr_start : (atom op)
-/// OLD: atom_expr_start : (atom op) | generator_expr_start
-fn atom_expr_start_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
-    input: &'i str,
-) -> IResult<&'i str, (Atom, Operator), E> {
-    context("atom expr start", tuple((atom_p, op_p)))(input)
-}
-
-/// atom_expr_end : (op atom)
-/// OLD: atom_expr_end : (op atom) | generator_expr_end
-fn atom_expr_end_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
-    input: &'i str,
-) -> IResult<&'i str, (Operator, Atom), E> {
-    context("atom expr end", tuple((op_p, atom_p)))(input)
-}
-
-/// atom_expr : big_atom (op big_atom)*
+/// atom_expr : atom_p (op atom_p)*
 pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AtomExpr, E> {
     context(
-        "atom expr",
-        map(
-            tuple((big_atom_p, many0(tuple((op_p, big_atom_p))))),
-            |((mut atoms, mut operator), rest)| {
-                // stick everything together
-                for (op, (mut atoms2, operator2)) in rest.clone() {
-                    // Add the atoms
-                    atoms.append(&mut atoms2);
-                    // Check for an operator update or operator error
-                    if operator == None {
-                        operator = Some(op);
-                    } else if operator != Some(op.clone()) || operator != operator2 {
-                        panic!(
-                            "Two types of operators in the same AtomExpr {:?} and {:?} in {:?}",
-                            operator, op, rest
-                        );
-                    }
-                }
-                AtomExpr { atoms, operator }
-            },
-        ),
-    )(input)
-}
-
-/// simple_atom_expr : big_atom (op big_atom)*
-pub fn simple_atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
-    input: &'i str,
-) -> IResult<&'i str, AtomExpr, E> {
-    context(
-        "atom expr",
+        "simple atom expr",
         map(
             tuple((atom_p, many0(tuple((op_p, atom_p))))),
             |(first_atom, rest)| {
@@ -605,17 +568,17 @@ fn property_list_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     context("property list", many0(sp_terminated!(property_p)))(input)
 }
 
-/// property : atom_expr equ atom_expr end
+/// property : toplevel_atom equ toplevel_atom end
 pub fn property_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AlgebraicProperty, E> {
     context(
         "property",
         map(
-            tuple((atom_expr_p, equ_p, atom_expr_p, end_p)),
-            |(atom_expr_left, _, atom_expr_right, _)| AlgebraicProperty {
-                atom_expr_left,
-                atom_expr_right,
+            tuple((toplevel_atom_p, equ_p, toplevel_atom_p, end_p)),
+            |(left_atom, _, right_atom, _)| AlgebraicProperty {
+                left_atom,
+                right_atom,
             },
         ),
     )(input)
@@ -673,12 +636,15 @@ pub fn split_algebraic_objects(
             }
             AlgebraicObject::PropertyGroup(bg) => {
                 properties.extend(bg.properties);
-                if bg.operator.op != '_' && bg.operator.associativity != Unknown {
-                    match operators.insert(bg.operator.op, bg.operator.associativity) {
-                        Some(ass) if ass != bg.operator.associativity => panic!(
-                            "Two different associativities of operator {}: {} (old) and {} (new)",
-                            bg.operator.op, ass, bg.operator.associativity
-                        ),
+                if bg.operator.op != '_' && bg.associativity != None {
+                    let old_assoc = operators.insert(bg.operator.op, bg.associativity.unwrap());
+                    match old_assoc {
+                        Some(assoc) if old_assoc != bg.associativity => {
+                            panic!(
+                                "Two different associativities of operator {}: {} (old) and {} (new)",
+                                bg.operator.op, assoc, bg.associativity.unwrap(),
+                            )
+                        }
                         _ => (),
                     }
                 }

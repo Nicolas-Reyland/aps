@@ -7,12 +7,11 @@ use std::{
     vec,
 };
 
-use crate::parser::OperatorAssociativity::{
-    LeftAssociative, LeftRightAssociative, NonAssociative, RightAssociative, Unknown,
-};
+use crate::clothing::strip_expr_naked;
+use crate::generate::generate_atom;
 use crate::parser::{
-    parenthesized_atom, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr,
-    Operator, OperatorAssociativity,
+    parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr,
+    SequentialExpr,
 };
 
 #[derive(Debug, Clone)]
@@ -37,7 +36,7 @@ type ExprNodeIndex = usize;
 pub struct ExprNode {
     // TODO: make atom_expr a parser::Atom, since
     // one should be able to ask for a prove such as "A * B = 0"
-    pub atom_expr: AtomExpr,
+    pub atom: Atom,
     pub transform: Option<AlgebraicProperty>,
     pub parent: ExprNodeIndex,
     pub index: ExprNodeIndex,
@@ -47,11 +46,7 @@ pub struct ExprNode {
 impl PartialEq for ExprNode {
     fn eq(&self, other: &Self) -> bool {
         // not comparing neighbours, nor depths
-        self.atom_expr == other.atom_expr
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
+        self.atom == other.atom
     }
 }
 
@@ -60,7 +55,7 @@ impl fmt::Display for ExprNode {
         write!(
             f,
             "ExprNode {{ expr: '{}', depth: {}, index: {}, parent: {}, transform: {}",
-            self.atom_expr,
+            self.atom,
             self.depth,
             self.index,
             self.parent,
@@ -73,12 +68,12 @@ impl fmt::Display for ExprNode {
     }
 }
 
-type Atom2AtomHashMap = HashMap<Atom, Atom>;
+pub type Atom2AtomHashMap = HashMap<Atom, Atom>;
 
 /// init a expression-graph
-pub fn init_graph(expr: AtomExpr) -> ExprGraph {
+pub fn init_graph(atom: Atom) -> ExprGraph {
     let base_node = ExprNode {
-        atom_expr: expr,
+        atom,
         parent: 0,
         transform: None,
         depth: 0,
@@ -100,11 +95,11 @@ pub fn init_graph(expr: AtomExpr) -> ExprGraph {
 pub fn explore_graph(
     graph: &mut ExprGraph,
     properties: &HashSet<AlgebraicProperty>,
-    functions: &HashSet<AlgebraicFunction>,
+    associativities: &AssociativityHashMap,
 ) -> bool {
     // apply every property to all the outer-layer nodes of the graph
     let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
-    let mut handles: Vec<JoinHandle<(AlgebraicProperty, usize, Vec<AtomExpr>)>> = Vec::new();
+    let mut handles: Vec<JoinHandle<(AlgebraicProperty, usize, HashSet<Atom>)>> = Vec::new();
     for node in graph
         .nodes
         .iter()
@@ -114,13 +109,13 @@ pub fn explore_graph(
         let (node_has_transform, node_transform) = match &node.transform {
             Some(node_tr) => (true, node_tr.clone()),
             None => (false, {
-                let empty_atom_expr = AtomExpr {
+                let empty_atom = Atom::Parenthesized(AtomExpr {
                     atoms: vec![],
                     operator: None,
-                };
+                });
                 AlgebraicProperty {
-                    atom_expr_right: empty_atom_expr.clone(),
-                    atom_expr_left: empty_atom_expr,
+                    left_atom: empty_atom.clone(),
+                    right_atom: empty_atom,
                 }
             }),
         };
@@ -130,22 +125,22 @@ pub fn explore_graph(
         // The transformation from 1 to 2 is "A + B = B + A". We don't want
         // to run this transformation again on 2 ("Y + X"),
         // since it will only give 1 back ("X + Y"), where we came from.
-        'properties: for property in properties
+        for property in properties
             .iter()
             .filter(|property| !node_has_transform || node_transform != **property)
         {
             // one thread per exploration
             // maybe batch jobs together using worker threads later ?
             handles.push({
-                let atom_expr_clone = node.atom_expr.clone();
+                let atom_clone = node.atom.clone();
                 let property_clone = property.clone();
-                let functions_clone = functions.clone();
+                let associativities_clone = associativities.clone();
                 let node_index = node.index;
                 thread::spawn(move || {
                     (
                         property_clone.clone(),
                         node_index,
-                        apply_property(&atom_expr_clone, &property_clone, &functions_clone),
+                        apply_property(&atom_clone, &property_clone, &associativities_clone),
                     )
                 })
             });
@@ -155,11 +150,11 @@ pub fn explore_graph(
     for handle in handles {
         let (property, node_index, new_expressions) = handle.join().unwrap();
         let node = &graph.nodes[node_index];
-        new_nodes.extend(new_expressions.iter().map(|new_expr| {
+        new_nodes.extend(new_expressions.iter().map(|new_atom| {
             (
                 node.clone(),
                 ExprNode {
-                    atom_expr: new_expr.clone(),
+                    atom: new_atom.clone(),
                     parent: 0,
                     transform: Some(property.clone()),
                     depth: 0,
@@ -214,20 +209,22 @@ fn print_node_dot_format(node: &ExprNode) -> String {
         if node.index == 0 { "red" } else { "blue" }
     ));
     // print label of node
-    content.push_str(&format!("{}", node.atom_expr));
+    content.push_str(&format!("{}", node.atom));
     // end printing definition line
     content.push_str(&format!("\"];\n"));
 
     // start printing neighbours
-    content.push_str(&format!(
-        "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
-        node.parent,
-        node.index,
-        match &node.transform {
-            Some(x) => x.to_string(),
-            None => "?".to_string(),
-        },
-    ));
+    if node.index != 0 || node.transform != None {
+        content.push_str(&format!(
+            "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
+            node.parent,
+            node.index,
+            match &node.transform {
+                Some(x) => x.to_string(),
+                None => "?".to_string(),
+            },
+        ));
+    }
     content.push_str("\n");
     content
 }
@@ -236,141 +233,175 @@ fn print_node_dot_format(node: &ExprNode) -> String {
 /// a property is an equality between two expressions,
 /// so the left and right sides of the property are matched to the source expression
 pub fn apply_property(
-    src_expr: &AtomExpr,
+    src_atom: &Atom,
     property: &AlgebraicProperty,
-    functions: &HashSet<AlgebraicFunction>,
-) -> Vec<AtomExpr> {
-    let mut new_expressions = match_and_apply(
-        src_expr,
-        &property.atom_expr_left,
-        &property.atom_expr_right,
-        functions,
+    associativities: &AssociativityHashMap,
+) -> HashSet<Atom> {
+    let mut new_atoms = match_and_apply(
+        src_atom,
+        &property.left_atom,
+        &property.right_atom,
+        associativities,
     );
-    new_expressions.extend(match_and_apply(
-        src_expr,
-        &property.atom_expr_right,
-        &property.atom_expr_left,
-        functions,
+    new_atoms.extend(match_and_apply(
+        src_atom,
+        &property.right_atom,
+        &property.left_atom,
+        associativities,
     ));
-    new_expressions
+    new_atoms
 }
 
 /// try to match the src_expr to the left_expr, then generate a new expression based on right_expr
 /// this returns a vector containing zero (if there is no match) or multiple (there is a match) new expressions
 /// this can yield multiple new expressions, because the source expression if checked for matching, but also all
 /// its 'sub-expressions' (including arguments of function calls)
-fn match_and_apply(
-    src: &AtomExpr,
-    left: &AtomExpr,
-    right: &AtomExpr,
-    functions: &HashSet<AlgebraicFunction>,
-) -> Vec<AtomExpr> {
+pub fn match_and_apply(
+    src: &Atom,
+    left: &Atom,
+    right: &Atom,
+    associativities: &AssociativityHashMap,
+) -> HashSet<Atom> {
     // call 'atom_expressions_match' on every expression (src_expr and sub-expression in parentheses)
-    let mut new_expressions: Vec<AtomExpr> = Vec::new();
-    // base call on src_expr
-    match atom_expressions_match(src, left) {
-        Some(mappings) => {
-            let new_expr = generate_new_expression(right, &mappings, &functions);
-            new_expressions.push(new_expr);
+    let mut new_atoms: HashSet<Atom> = HashSet::new();
+    // base call on src
+    match left_to_right_match(src, left, associativities) {
+        // use right atom as-is
+        Some(None) => {
+            eprintln!("adding right as-is: {}", right);
+            new_atoms.insert(right.clone());
+            ()
+        }
+        // need to generate new atom, based on right atom
+        Some(Some(mappings)) => {
+            new_atoms.insert(generate_atom(right, &mappings, associativities));
         }
         None => (),
-    }
-    // recursively call 'atom_expressions_match' on the sub-expressions
-    for (sub_i, sub) in src
-        .atoms
-        .iter()
-        .enumerate()
-        .filter_map(|(atom_i, atom)| match atom {
-            Atom::Parenthesized(sub_expr) => Some((atom_i, (*sub_expr).clone())),
-            _ => None,
-        })
-    {
-        new_expressions.extend(
-            match_and_apply(&sub, left, right, functions)
-                .iter()
-                .map(|sub_tr| {
-                    // reconstruct like that : <everything b4> (new sub) <everything after>
-                    // only the sub changes, compared to the src. no other atoms
-                    let mut src_atoms_prefix = src.atoms[..sub_i].to_vec().clone();
-                    src_atoms_prefix.push(parenthesized_atom(sub_tr.clone()));
-                    let mut src_atoms_suffix = src.atoms[sub_i + 1..].to_vec().clone();
-                    src_atoms_prefix.append(&mut src_atoms_suffix);
-                    AtomExpr {
-                        atoms: src_atoms_prefix,
-                        operator: src.operator.clone(),
-                    }
-                })
-                .collect::<Vec<AtomExpr>>(),
-        );
-    }
+    };
+    // recursively call 'match_and_apply' on all sorts of sub-expressions
+    // these are: expressions, function-call-args
+    // all atom types are 'penetrated' (also sequential-expressions)
+    new_atoms.extend(match_and_apply_all_sub_expressions(
+        src,
+        left,
+        right,
+        associativities,
+    ));
 
-    // recursively call 'atom_expressions_match' on the function calls
-    for (sub_i, arg_i, sub) in src
-        .atoms
-        .iter()
-        .enumerate()
-        .filter_map(|(atom_i, atom)| match atom {
-            Atom::FunctionCall((_, expr_args)) => Some(
-                expr_args
-                    .into_iter()
-                    .enumerate()
-                    .map(move |(arg_i, arg)| (atom_i, arg_i, arg)),
-            ),
-            _ => None,
-        })
-        .flatten()
-    {
-        new_expressions.extend(
-            match_and_apply(&sub, left, right, functions)
-                .iter()
-                .map(|new_arg| {
-                    // reconstruct like that : <everything b4> func(<args b4> (new arg) <args after>) <everything after>
-                    // only the sub changes, compared to the src. no other atoms
-                    let mut new_atoms = src.atoms.clone();
-                    new_atoms[sub_i] = match new_atoms[sub_i].clone() {
-                        Atom::FunctionCall((fn_name, mut fn_args)) => Atom::FunctionCall({
-                            fn_args[arg_i] = (*new_arg).clone();
-                            (fn_name, fn_args)
-                        }),
-                        _ => panic!(
-                            "Did not find function call at index {}: {:#?}",
-                            sub_i, new_atoms[sub_i]
-                        ),
-                    };
-                    AtomExpr {
-                        atoms: new_atoms,
-                        operator: src.operator.clone(),
-                    }
-                })
-                .collect::<Vec<AtomExpr>>(),
-        );
-    }
-    new_expressions
+    new_atoms
 }
 
-fn atom_expressions_match(
+fn match_and_apply_all_sub_expressions(
+    src: &Atom,
+    left: &Atom,
+    right: &Atom,
+    associativities: &AssociativityHashMap,
+) -> HashSet<Atom> {
+    let mut new_atoms = HashSet::new();
+    match src {
+        Atom::Parenthesized(expr) => new_atoms.extend(
+            expr.atoms
+                .iter()
+                .enumerate()
+                .map(|(atom_index, expr_elt)| {
+                    multiple_replace_nth_atom(
+                        &expr.atoms,
+                        atom_index,
+                        match_and_apply(expr_elt, left, right, associativities),
+                    )
+                })
+                .flatten()
+                .map(|new_expr_atoms| {
+                    Atom::Parenthesized(AtomExpr {
+                        atoms: new_expr_atoms,
+                        operator: expr.operator.clone(),
+                    })
+                }),
+        ),
+        Atom::FunctionCall(fn_call) => new_atoms.extend(
+            fn_call
+                .args
+                .iter()
+                .enumerate()
+                .map(|(atom_index, arg)| {
+                    multiple_replace_nth_atom(
+                        &fn_call.args,
+                        atom_index,
+                        match_and_apply(arg, left, right, associativities),
+                    )
+                })
+                .flatten()
+                .map(|new_args| {
+                    Atom::FunctionCall(FunctionCallExpr {
+                        name: fn_call.name.to_owned(),
+                        args: new_args,
+                    })
+                }),
+        ),
+        Atom::Sequential(seq) => {
+            // go through enumerate
+            new_atoms.extend(
+                match_and_apply(&seq.enumerator, left, right, associativities)
+                    .into_iter()
+                    .map(|enumerator| {
+                        Atom::Sequential(Box::new(SequentialExpr {
+                            operator: seq.operator.clone(),
+                            enumerator,
+                            body: seq.body.clone(),
+                        }))
+                    }),
+            );
+            // go through body
+            new_atoms.extend(
+                match_and_apply(&seq.body, left, right, associativities)
+                    .into_iter()
+                    .map(|body| {
+                        Atom::Sequential(Box::new(SequentialExpr {
+                            operator: seq.operator.clone(),
+                            enumerator: seq.enumerator.clone(),
+                            body,
+                        }))
+                    }),
+            );
+        }
+        _ => (),
+    };
+    new_atoms
+}
+
+/// Returns all the possible
+fn multiple_replace_nth_atom(
+    atoms: &Vec<Atom>,
+    index: usize,
+    new_atoms: HashSet<Atom>,
+) -> HashSet<Vec<Atom>> {
+    new_atoms
+        .iter()
+        .map(|new_atom| {
+            let mut atoms_clone = atoms.clone();
+            atoms_clone[index] = new_atom.clone();
+            atoms_clone
+        })
+        .collect()
+}
+
+fn left_to_right_match_expressions(
     src_expr: &AtomExpr,  // source expression
     dest_expr: &AtomExpr, // expression to match against
-) -> Option<Atom2AtomHashMap> {
-    // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
-    let mut mappings: Atom2AtomHashMap = HashMap::new();
-    // number of atoms
-    let num_src_atoms = src_expr.atoms.len();
-    let num_dest_atoms = dest_expr.atoms.len();
+    associativities: &AssociativityHashMap,
+) -> Option<Option<Atom2AtomHashMap>> {
     // check the two operators
-    if src_expr.operator != dest_expr.operator {
+    if src_expr.operator != dest_expr.operator || src_expr.atoms.len() != dest_expr.atoms.len() {
         return None;
     }
-    // Match one-by-one (cannot compare lengths bc of things like '...' or generators)
-    let mut i = 0;
-    'main_loop: while i < num_src_atoms && i < num_dest_atoms {
-        // compare atoms
-        let atom_a = &src_expr.atoms[i];
-        let atom_b = &dest_expr.atoms[i];
-        match left_to_right_match(atom_a, atom_b) {
-            (true, None) => (),
-            (true, Some(par_mappings)) => {
-                for (key, value) in par_mappings {
+    // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
+    let mut mappings: Atom2AtomHashMap = HashMap::new();
+    // left-to-right-match atoms one-by-one
+    for (sub_src_atom, sub_dest_atom) in src_expr.atoms.iter().zip(dest_expr.atoms.clone()) {
+        match left_to_right_match(&sub_src_atom, &sub_dest_atom, associativities) {
+            Some(None) => (),
+            Some(Some(new_mappings)) => {
+                for (key, value) in new_mappings {
                     match mappings.insert(key, value.clone()) {
                         None => (),
                         Some(old_value) => {
@@ -381,28 +412,16 @@ fn atom_expressions_match(
                         }
                     }
                 }
-                i += 1;
-                continue 'main_loop;
             }
-            (false, _) => return None,
+            None => return None,
         }
-        // check with already-existing mapping, or insert as new mapping
-        match mappings.get(atom_b) {
-            Some(atom_c) => {
-                // atom_c should be equal to atom_a
-                if atom_c != atom_a {
-                    return None;
-                }
-            }
-            None => assert_eq!(mappings.insert(atom_b.clone(), atom_a.clone()), None),
-        }
-        // go to next (operator, atom) pair
-        i += 1;
     }
-    if i != num_src_atoms || i != num_dest_atoms {
-        return None;
-    }
-    Some(mappings)
+
+    Some(if mappings.is_empty() {
+        None
+    } else {
+        Some(mappings)
+    })
 }
 
 /// Is atom_a mappable on atom_b ?
@@ -414,33 +433,44 @@ fn atom_expressions_match(
 /// limitation to overcome : the left part of 'A = 1 * A' (just 'A')
 /// is not seen as mappable to anything else than another lone atom.
 /// An expression should be mappable too, e.g. 'A + B = 1 * (A + B)'
-///
-/// TODO: convert the return type to Result<Option<A...>>, or Option<Option<A...>>
-fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomHashMap>) {
+fn left_to_right_match(
+    atom_a: &Atom,
+    atom_b: &Atom,
+    associativities: &AssociativityHashMap,
+) -> Option<Option<Atom2AtomHashMap>> {
     // we match the second atom !!
     match atom_b {
         Atom::Parenthesized(par_b) => match atom_a {
-            Atom::Parenthesized(par_a) => match atom_expressions_match(par_a, par_b) {
-                Some(par_mappings) => (true, Some(par_mappings)),
-                None => (false, None),
-            },
-            _ => (false, None),
+            Atom::Parenthesized(par_a) => {
+                left_to_right_match_expressions(par_a, par_b, associativities)
+            }
+            _ => None,
         },
-        Atom::Value(_) => (true, None),
-        Atom::Special(_) => (atom_a == atom_b, None),
-        Atom::FunctionCall((fn_name_b, fn_expr_args_b)) => match atom_a {
+        Atom::Symbol(_) => Some(Some(
+            // map atom_b to whatever atom_a is
+            vec![(atom_b.clone(), atom_a.clone())].into_iter().collect(),
+        )),
+        Atom::Value(_) => {
+            if atom_a == atom_b {
+                Some(None)
+            } else {
+                None
+            }
+        }
+        Atom::FunctionCall(fn_call_b) => match atom_a {
             // a function call is only mappable to the same function call, with each argument
             // being mappable to it's alter-atom
-            Atom::FunctionCall((fn_name_a, fn_expr_args_a)) => {
+            Atom::FunctionCall(fn_call_a) => {
                 // It should be the same function (by name and number of arguments)
-                if fn_name_b != fn_name_a || fn_expr_args_b.len() != fn_expr_args_a.len() {
-                    return (false, None);
+                if fn_call_b.name != fn_call_a.name || fn_call_b.args.len() != fn_call_a.args.len()
+                {
+                    return None;
                 }
                 // check 'mappability' of each argument
                 let mut fn_mappings: Atom2AtomHashMap = HashMap::new();
-                for (expr_arg_a, expr_arg_b) in fn_expr_args_a.iter().zip(fn_expr_args_b.iter()) {
-                    match atom_expressions_match(expr_arg_a, expr_arg_b) {
-                        Some(arg_mappings) => {
+                for (arg_a, arg_b) in fn_call_a.args.iter().zip(fn_call_b.args.iter()) {
+                    match left_to_right_match(arg_a, arg_b, associativities) {
+                        Some(Some(arg_mappings)) => {
                             // add all the mappings, but they shouldn't be any collisions
                             for (arg_key, arg_value) in arg_mappings {
                                 match fn_mappings.insert(arg_key, arg_value.clone()) {
@@ -459,345 +489,195 @@ fn left_to_right_match(atom_a: &Atom, atom_b: &Atom) -> (bool, Option<Atom2AtomH
                                         // W ^ 2 mapped to A
                                         // 2 * Z mapped to B
                                         if old_arg_value != arg_value {
-                                            return (false, None);
+                                            return None;
                                         }
                                     }
                                     _ => (),
                                 }
                             }
                         }
-                        None => return (false, None),
+                        Some(None) => (),
+                        None => return None,
                     }
                 }
                 // arguments are all mappable
-                (true, Some(fn_mappings))
+                Some(Some(fn_mappings))
             }
-            _ => (false, None),
+            _ => None,
         },
+        Atom::Sequential(seq_expr_b) => {
+            left_to_right_match_to_sequential(atom_a, seq_expr_b, associativities)
+        }
     }
 }
 
-/// Generate new expression using source, value-expression and mappings
-/// mappings matches atom-names from the source-expression to the ones in the value-expression (and vice-versa)
-fn generate_new_expression(
-    v_expr: &AtomExpr,
-    mappings: &Atom2AtomHashMap,
-    functions: &&HashSet<AlgebraicFunction>,
-) -> AtomExpr {
-    // init new atoms and operator
-    let mut atoms: Vec<Atom> = Vec::new();
-    let operator: Option<Operator> = v_expr.operator.clone();
-    // match each atom of the v-expr
-    let num_v_atoms = v_expr.atoms.len();
-    let mut i = 0;
-    //println!("Mappings:\n{:#?}\n", mappings);
-    /* 'main_loop: */
-    while i < num_v_atoms {
-        let atom_v = &v_expr.atoms[i];
+fn left_to_right_match_to_sequential(
+    atom_a: &Atom,
+    seq_expr_b: &SequentialExpr,
+    associativities: &AssociativityHashMap,
+) -> Option<Option<Atom2AtomHashMap>> {
+    match atom_a {
+        Atom::Sequential(seq_expr_a) => {
+            left_to_right_match_sequentials(seq_expr_a, seq_expr_b, associativities)
+        }
+        Atom::Parenthesized(expr_a) => {
+            left_to_right_match_expr_to_sequential(expr_a, seq_expr_b, associativities)
+        }
+        _ => left_to_right_match_once_sequential(atom_a, seq_expr_b, associativities),
+    }
+}
 
-        // normal mapping
-        atoms.push(match atom_v {
-            Atom::Parenthesized(par_v) => {
-                parenthesized_atom(generate_new_expression(par_v, mappings, functions))
-            }
-            Atom::Special(_) => atom_v.clone(),
-            Atom::FunctionCall((fn_name, _)) => {
-                for function in *functions {
-                    if function.name == *fn_name {
-                        return generate_new_expression(
-                            &function.atom_expr_right,
-                            mappings,
-                            functions,
-                        );
-                    }
-                }
-                // function is not defined
-                panic!(
-                    "No function named \"{}\"\nFunctions :\n{:?}",
-                    fn_name, functions
-                );
-            }
-            /*
-            Atom::Generator(gen_expr) => {
-                todo!("Generator expressions not handled yet");
-                // check for iterator (must be a numeral, or we can't generate)
-                let num_iterations = match mappings.get(&gen_expr.iterator) {
-                    Some(Either::Left(Atom::Special(c))) => c.to_digit(10),
-                    _ => panic!("Iterator value was not a special value for generator expression.\natom_v: {atom_v}, expr_v: {v_expr}\nMappings :{:#?}\n", mappings),
-                }.unwrap();
-                // remove the special operator ('{' or '}')
-                if ! operators.is_empty() {
-                    if operators.last().unwrap().op == '}' {
-                        operators.pop().unwrap();
-                    } else {
-                        // should not be added (guard at beginning of the loop)
-                        assert_eq!(v_expr.operators[i - 1].op, '{');
-                    }
-                }
-                // get mappings for the atoms inside the generator-expression
-                let vec_capacity = gen_expr.elements.len() / 2;
-                let mut mapped_atoms: Vec<Atom> = Vec::with_capacity(vec_capacity);
-                let mut gen_operator: Option<Operator> = None;
-                for gen_element in &gen_expr.elements {
-                    match gen_element {
-                        GeneratorElement::GenAtom(atom) => {
-                            match mappings.get(atom) {
-                                Some(Either::Left(atom)) => mapped_atoms.push((*atom).clone()),
-                                Some(Either::Right(atom_expr)) => mapped_atoms.push(parenthesized_atom((*atom_expr).clone())),
-                                None => panic!("Could not find mapping for gen-element {}", gen_element),
-                            }
-                        },
-                        GeneratorElement::GenOperator(op) => gen_operators.push((*op).clone()),
-                    }
-                }
-                // generate part of the expression
-                operator = gen_operator;
-                for _ in 0..num_iterations {
-                    atoms.extend(mapped_atoms.clone());
-                }
-                i += num_iterations as usize;
-                continue 'main_loop;
-            }
-            */
-            _ => match mappings.get(atom_v) {
-                Some(atom) => atom.clone(),
-                None => panic!(
-                    "Could not find mapping for atom {} in expr '{}'\nMappings :\n{:#?}\n",
-                    atom_v, v_expr, mappings
+fn left_to_right_match_once_sequential(
+    atom_a: &Atom,
+    seq_expr_b: &SequentialExpr,
+    associativities: &AssociativityHashMap,
+) -> Option<Option<Atom2AtomHashMap>> {
+    match left_to_right_match(atom_a, &seq_expr_b.body, associativities) {
+        Some(opt_mappings) => Some(Some({
+            let mut mappings = match opt_mappings {
+                Some(prev_mappings) => prev_mappings,
+                None => HashMap::new(),
+            };
+            // add mapping for enumerator
+            let enumerator = seq_expr_b.enumerator.clone();
+            let new_enumerator = Atom::Value(1);
+            // make sure the enumerator '1' is mappable to the enumerator of the sequence
+            if left_to_right_match(&new_enumerator, &enumerator, associativities) == None {
+                return None;
+            };
+            // TODO: check for already existing values
+            mappings.insert(enumerator, new_enumerator);
+            // add mapping for body
+            mappings.insert(seq_expr_b.body.clone(), atom_a.clone());
+            mappings
+        })),
+        None => None,
+    }
+}
+
+/// Example : match "(A * A) * A" to "# * : N : A #"
+fn left_to_right_match_expr_to_sequential(
+    expr_a: &AtomExpr,
+    seq_expr_b: &SequentialExpr,
+    associativities: &AssociativityHashMap,
+) -> Option<Option<Atom2AtomHashMap>> {
+    // we should only match more than 2 times (included), since matching one time is already
+    // handled previously (see left_to_right_match_to_sequential)
+    // enumerator can only be an Atom::Symbol or Atom::Special for an expression to match against it
+    if expr_a.operator != Some(seq_expr_b.operator.clone()) {
+        return None;
+    }
+    // it has to be an expression, or else there won't be two or more elements
+    let naked_expr_a =
+        match strip_expr_naked(&parenthesized_atom((*expr_a).clone()), associativities) {
+            Atom::Parenthesized(e) => e,
+            _ => return None,
+        };
+    let sequential_length = naked_expr_a.atoms.len() as i32;
+    // more than two elements in the sequence
+    if sequential_length < 2 {
+        return None;
+    }
+    let repeated_atom = naked_expr_a.atoms.first().unwrap().clone();
+    // all elements are equal (e.g. A * A * A => every elt is 'A')
+    if naked_expr_a
+        .atoms
+        .clone()
+        .iter()
+        .skip(1)
+        .any(|atom| *atom != repeated_atom)
+    {
+        return None;
+    }
+    let seq_body_atom = seq_expr_b.body.clone();
+    // match the sequential-expression body with (e.g. body is not just an Atom::Symbol)
+    let mut mappings = match left_to_right_match(&repeated_atom, &seq_body_atom, associativities) {
+        Some(Some(prev_mappings)) => prev_mappings,
+        // at least the body atom pair is present
+        Some(None) => HashMap::with_capacity(1),
+        None => return None,
+    };
+    // add body to mappings
+    match mappings.insert(seq_body_atom.clone(), repeated_atom.clone()) {
+        Some(old_value) if old_value != repeated_atom => panic!(
+            "Value of sequential body was already present in hash map: {}:{} (old {}) in {:#?}",
+            seq_body_atom, repeated_atom, old_value, mappings
+        ),
+        _ => (),
+    };
+    // check for enumerator
+    let seq_enumerator_atom = seq_expr_b.enumerator.clone();
+    match &seq_enumerator_atom {
+        // match any number of times
+        Atom::Symbol(_) => {
+            // enumerator atom
+            match mappings.insert(
+                seq_enumerator_atom.clone(),
+                Atom::Value(sequential_length),
+            ) {
+                Some(old_value) if old_value != seq_enumerator_atom => panic!(
+                    "Value of sequential enumerator was already present in hash map: {}:{} (old {}) in {:#?}",
+                    seq_enumerator_atom, sequential_length, old_value, mappings
                 ),
-            },
-        });
-
-        i += 1;
-    }
-    AtomExpr { atoms, operator }
-}
-
-/// Strips the expression naked.
-/// Removes parentheses for easier and faster comparison.
-/// Operator associativity (left, right, none) is taken into account.
-///
-/// Here is an example of what is meant :
-/// "((A + B) + C) + D" => "A + B + C + D"
-/// Of course, this only works for left-associative operators.
-/// The associativity of operators can be specified in the grammar :
-/// "^ r :: { ... }" makes the ^ operator right-associative.
-/// There are 3 choices : l, r, n (left-, right-, non- associative)
-/// If no associativity is gen (e.g. "+ :: { ... }", the default is left-associativity)
-/// By default, all operators are considered to be left-associative.
-///
-/// Here is another example: "A + (B + C)" => "A + (B + C)"
-/// We cannot remove parentheses, since '+' is not right-associative
-pub fn strip_expr_naked(expr: &AtomExpr, associativities: &AssociativityHashMap) -> AtomExpr {
-    // left-associative operator case (default)
-    let operator = expr.operator.clone();
-    // "((A + B) + C) + D" => "(A + B) + C + D" => "A + B + C + D"
-    let associativity = get_operator_associativity(&operator, associativities);
-
-    if associativity == NonAssociative {
-        // only strip all the sub-expressions naked, do nothing with the current expression
-        return map_over_all_sub_expressions(
-            &expr.atoms,
-            expr.operator.clone(),
-            associativities,
-            &strip_expr_naked,
-        );
-    }
-    if associativity == LeftRightAssociative {
-        return strip_expr_naked_left_right(expr, associativities);
-    }
-
-    let left_ass = associativity == LeftAssociative;
-    // TODO: remove this later on
-    if !left_ass {
-        assert_eq!(associativity, RightAssociative);
-    }
-
-    // merge the atoms from an atom-expression (isolated) and the current expression
-    // except for the isolated one, sub-expressions are NOT yet stripped naked themselves
-    let new_atoms = match if left_ass {
-        expr.atoms.split_first()
-    } else {
-        expr.atoms.split_last()
-    } {
-        Some((isolated, rest)) => match isolated.clone() {
-            // the isolated atom is an expression, so we should remove the parentheses
-            Atom::Parenthesized(mut isolated_expr) if expr.operator == isolated_expr.operator => {
-                // make the isolated expression naked
-                isolated_expr = strip_expr_naked(&isolated_expr, associativities);
-                // merge the isolated and rest into new expression
-                let mut isolated_expr_atoms = Vec::new();
-                if left_ass {
-                    // isolated is left, and rest is right
-                    isolated_expr_atoms.append(&mut isolated_expr.atoms);
-                    isolated_expr_atoms.extend(rest.to_vec());
-                } else {
-                    // isolated is right, and rest is left
-                    isolated_expr_atoms.extend(rest.to_vec());
-                    isolated_expr_atoms.append(&mut isolated_expr.atoms);
-                }
-                isolated_expr_atoms
-            }
-            // the isolated atom is not an AtomExpr (should not merge it with the others)
-            _ => expr.atoms.clone(),
-        },
-        // wtf ??
-        None => expr.atoms.clone(),
-    };
-    map_over_all_sub_expressions(&new_atoms, operator, associativities, &strip_expr_naked)
-}
-
-fn strip_expr_naked_left_right(
-    expr: &AtomExpr,
-    associativities: &AssociativityHashMap,
-) -> AtomExpr {
-    let mut new_atoms: Vec<Atom> = Vec::with_capacity(expr.atoms.len());
-    for atom in expr.atoms.clone() {
-        match atom.clone() {
-            Atom::Parenthesized(atom_expr) => {
-                if atom_expr.operator == expr.operator {
-                    // merge this expression
-                    let mut new_atom_expr =
-                        strip_expr_naked_left_right(&atom_expr, associativities);
-                    new_atoms.append(&mut new_atom_expr.atoms);
-                } else {
-                    // add it as-is (not to be merged)
-                    new_atoms.push(atom);
-                }
-            }
-            _ => new_atoms.push(atom),
+                _ => (),
+            };
+            Some(Some(mappings))
         }
+        // match exactly n times
+        Atom::Value(n) if *n != 1 && *n == sequential_length => {
+            // no enumerator mapping (it is a Atom::Special)
+            Some(Some(mappings))
+        }
+        _ => None,
     }
+}
 
-    map_over_all_sub_expressions(
-        &new_atoms,
-        expr.operator.clone(),
+fn left_to_right_match_sequentials(
+    seq_expr_a: &SequentialExpr,
+    seq_expr_b: &SequentialExpr,
+    associativities: &AssociativityHashMap,
+) -> Option<Option<Atom2AtomHashMap>> {
+    if seq_expr_b.operator != seq_expr_a.operator {
+        return None;
+    }
+    let mut seq_mappings: Atom2AtomHashMap = HashMap::new();
+    match left_to_right_match(
+        // HERE: swapped the two first args
+        &seq_expr_a.enumerator,
+        &seq_expr_b.enumerator,
         associativities,
-        &strip_expr_naked,
-    )
-}
-
-/// Dresses the expression up.
-/// Adds parentheses for easier and faster property matching.
-/// Operator associativity (left, right, none) is taken into account.
-///
-/// Here is an example of what is meant :
-/// "A + B + C + D" => "((A + B) + C) + D"
-/// Of course, this only works for left-associative operators.
-/// The associativity of operators can be specified in the grammar :
-/// "^ r :: { ... }" makes the ^ operator right-associative.
-/// There are 3 choices : l, r, n (left-, right-, non- associative)
-/// If no associativity is gen (e.g. "+ :: { ... }", the default is left-associativity)
-/// By default, all operators are considered to be left-associative.
-pub fn dress_up_expr(expr: &AtomExpr, associativities: &AssociativityHashMap) -> AtomExpr {
-    // left-associative operator case (default)
-    let operator = expr.operator.clone();
-    // "A + B + C + D" => "(A + B + C) + D" => "((A + B) + C) + D"
-    let associativity = match get_operator_associativity(&operator, associativities) {
-        // It is both left and right associative, so we know that :
-        // A + B + C = A + (B + C) = (A + B) + C
-        LeftRightAssociative => LeftRightAssociative,
-        ass => ass,
-    };
-
-    if associativity == NonAssociative {
-        // only dress up the sub-expressions naked, do nothing with the current expression
-        return map_over_all_sub_expressions(
-            &expr.atoms,
-            expr.operator.clone(),
-            associativities,
-            &dress_up_expr,
-        );
-    }
-
-    let left_ass = associativity == LeftAssociative;
-    // TODO: remove this later on
-    if !left_ass {
-        assert_eq!(associativity, RightAssociative);
-    }
-
-    // group all the atoms, except for one (isolated) into a new expression
-    // sub-expressions are NOT yet dressed up themselves, not even the isolated one
-    let new_atoms: Vec<Atom> = match if left_ass {
-        expr.atoms.split_last()
-    } else {
-        expr.atoms.split_first()
-    } {
-        Some((isolated, rest)) => {
-            let num_left = rest.len();
-            if num_left == 0 {
-                vec![isolated.clone()]
-            } else {
-                let rest_expr = if num_left == 1 {
-                    rest[0].clone()
-                } else {
-                    Atom::Parenthesized(AtomExpr {
-                        atoms: rest.to_vec(),
-                        operator: operator.clone(),
-                    })
-                };
-                if left_ass {
-                    vec![rest_expr, isolated.clone()]
-                } else {
-                    vec![isolated.clone(), rest_expr]
-                }
-            }
+    ) {
+        None => return None,
+        Some(Some(enum_mappings)) => {
+            seq_mappings.extend(enum_mappings);
         }
-        // wtf ??
-        None => return (*expr).clone(),
+        Some(None) => (),
     };
-    map_over_all_sub_expressions(&new_atoms, operator, associativities, &dress_up_expr)
-}
-
-/// Returns the associativity of the operator, based on the given vector of operators
-/// If operator is None, it is seen as non-associative. The default associativity for an
-/// operator is the left-associativity.
-fn get_operator_associativity(
-    operator: &Option<Operator>,
-    associativities: &AssociativityHashMap,
-) -> OperatorAssociativity {
-    if *operator == None {
-        NonAssociative
-    } else {
-        let operator_char = operator.clone().unwrap().op;
-        match associativities.get(&operator_char) {
-            Some(associativity) if *associativity != Unknown => *associativity,
-            _ => LeftAssociative,
+    match left_to_right_match(
+        // HERE: swapped the two first args
+        &seq_expr_a.body,
+        &seq_expr_b.body,
+        associativities,
+    ) {
+        None => return None,
+        Some(Some(body_mappings)) => {
+            seq_mappings.extend(body_mappings);
         }
-    }
-}
-
-/// Recursively maps f over all sub expressions in atoms.
-/// The returned AtomExpr struct is constructed with the given operator
-/// The operators argument is used in the calls to f
-fn map_over_all_sub_expressions(
-    atoms: &Vec<Atom>,
-    operator: Option<Operator>,
-    associativities: &AssociativityHashMap,
-    f: &dyn Fn(&AtomExpr, &AssociativityHashMap) -> AtomExpr,
-) -> AtomExpr {
-    AtomExpr {
-        atoms: atoms
-            .iter()
-            .map(|atom| match atom {
-                Atom::Parenthesized(sub_expr) => Atom::Parenthesized(f(&sub_expr, associativities)),
-                Atom::FunctionCall((fn_name, args)) => Atom::FunctionCall((
-                    fn_name.to_string(),
-                    // map each argument with f
-                    args.iter()
-                        .map(|arg_expr| f(arg_expr, associativities))
-                        .collect(),
-                )),
-                _ => (*atom).clone(),
-            })
-            .collect(),
-        operator,
-    }
+        Some(None) => (),
+    };
+    Some(if seq_mappings.is_empty() {
+        None
+    } else {
+        Some(seq_mappings)
+    })
 }
 
 pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
-    AtomExpr {
-        atoms: vec![atom],
-        operator: None,
+    match atom {
+        Atom::Parenthesized(expr) => expr.clone(),
+        _ => AtomExpr {
+            atoms: vec![atom],
+            operator: None,
+        },
     }
 }

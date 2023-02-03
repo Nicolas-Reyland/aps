@@ -1,0 +1,21 @@
++ lr :: {
+    add(A, B) = A + B ;
+    add(A, B) = add(B, A) ;
+    add(add(A, B), C) = add(A, add(B, C)) ;
+}
+
+* lr :: {
+    mul(A, B) = A * B ;
+    mul(A, B) = mul(B, A) ;
+    mul(mul(A, B), C) = mul(A, mul(B, C)) ;
+}
+
+_ :: {
+    // Distributivity
+    mul(A, add(B, C)) = add(mul(A, B), mul(A, C)) ;
+    // Useful
+    add(A, A) = mul(2, A) ;
+}
+
+square :: A -> mul(A, A) ;
+double :: A -> mul(2, A) ;

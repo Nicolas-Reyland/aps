@@ -1,11 +1,11 @@
 // APS Repl
 
-use crate::explorer::strip_expr_naked;
 use crate::{
-    explorer::{atom2atom_expr, explore_graph, init_graph, print_graph_dot_format},
+    clothing::strip_expr_naked,
+    explorer::{explore_graph, init_graph, print_graph_dot_format},
     parser::{
         self, split_algebraic_objects, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap,
-        Atom, AtomExpr, KProperty,
+        Atom, FunctionCallExpr, KProperty,
     },
     preprocessor::read_and_preprocess_file,
     solution::solve_equality,
@@ -25,8 +25,9 @@ pub struct ReplContext {
     pub functions: HashSet<AlgebraicFunction>,
     pub k_properties: HashSet<KProperty>,
     pub associativities: AssociativityHashMap,
-    pub pretty_print_steps: bool,
     pub auto_break: bool,
+    pub pretty_print_steps: bool,
+    pub route_poc: bool,
 }
 
 pub fn init_context() -> ReplContext {
@@ -35,8 +36,9 @@ pub fn init_context() -> ReplContext {
         functions: HashSet::new(),
         k_properties: HashSet::new(),
         associativities: HashMap::new(),
-        pretty_print_steps: true,
         auto_break: true,
+        pretty_print_steps: true,
+        route_poc: false,
     }
 }
 
@@ -45,8 +47,9 @@ fn reset_context(context: &mut ReplContext) {
     context.functions.clear();
     context.k_properties.clear();
     context.associativities.clear();
-    context.pretty_print_steps = true;
     context.auto_break = true;
+    context.pretty_print_steps = true;
+    context.route_poc = false;
 }
 
 // used in settings_callback
@@ -116,7 +119,9 @@ pub fn repl(context: ReplContext) {
             Command::new("settings")
                 .arg(Arg::new("param").required(true).num_args(1))
                 .arg(Arg::new("action").required(false).num_args(1))
-                .about("Print or set the auto-break and expr-pretty-print (on/off/show)"),
+                .about(
+                    "Print or set the auto-break, route-poc and expr-pretty-print (on/off/show)",
+                ),
             settings_callback,
         )
         .with_command(
@@ -186,7 +191,8 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         Some(x) => x.as_str(),
         None => {
             return Ok(Some(
-                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
+                " usage: settings (auto-break/route-poc/expr-pretty-print) (on/off/show)"
+                    .to_string(),
             ))
         }
     };
@@ -197,6 +203,7 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
     match param_name {
         "auto-break" => handle_setting!(context.auto_break, action_name, param_name),
         "expr-pretty-print" => handle_setting!(context.pretty_print_steps, action_name, param_name),
+        "route-poc" => handle_setting!(context.route_poc, action_name, param_name),
         _ => {
             return Ok(Some(
                 " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
@@ -210,7 +217,7 @@ fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<S
     let objects = split_algebraic_objects(match parser::root::<parser::ApsParserKind>(&body_str) {
         Ok(("", objects)) => objects,
         Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
-        Err(err) => return Ok(Some(format!(" Error occurred while parsing :{}\n", err))),
+        Err(err) => return Ok(Some(format!(" Error occurred while parsing :\n{}", err))),
     });
     // extend context
     extend_context(objects, context);
@@ -220,15 +227,15 @@ fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<S
 fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     // concat args of expression
     let expression_str = concat_args(args.get_many("expression").unwrap());
-    let expression = str2atom_expr(&expression_str);
-    let mut graph = init_graph(expression);
+    let atom = str2atom(&expression_str);
+    let mut graph = init_graph(atom);
     // number of explorations
     let depth = args
         .get_one::<String>("num explorations")
         .unwrap()
         .parse::<u8>()?;
     for _ in 0..depth {
-        if !explore_graph(&mut graph, &context.properties, &context.functions) {
+        if !explore_graph(&mut graph, &context.properties, &context.associativities) {
             break;
         }
     }
@@ -270,11 +277,10 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
     // solve the equation
     let solution = match solve_equality(
         context.properties.clone(),
-        context.functions.clone(),
         context.k_properties.clone(),
         &context.associativities,
-        &property.atom_expr_left,
-        &property.atom_expr_right,
+        &property.left_atom,
+        &property.right_atom,
         context.auto_break,
     ) {
         Some(solution) => solution,
@@ -312,7 +318,11 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
             }
             (
                 expr_str,
-                String::from(if *common { " /!\\\t" } else { "\t" }),
+                String::from(if *common && context.route_poc {
+                    " /!\\\t"
+                } else {
+                    "\t"
+                }),
                 rule_str.clone(),
             )
         })
@@ -389,11 +399,11 @@ fn extend_context(
     context
         .properties
         .extend(functions.iter().map(|function| AlgebraicProperty {
-            atom_expr_left: atom2atom_expr(Atom::FunctionCall((
-                function.name.clone(),
-                function.atom_expr_args.clone(),
-            ))),
-            atom_expr_right: function.atom_expr_right.clone(),
+            left_atom: Atom::FunctionCall(FunctionCallExpr {
+                name: function.name.clone(),
+                args: function.arg_atoms.clone(),
+            }),
+            right_atom: function.value_atom.clone(),
         }));
 }
 fn concat_args(args: ValuesRef<String>) -> String {
@@ -405,13 +415,13 @@ fn concat_args(args: ValuesRef<String>) -> String {
     property_str
 }
 
-pub fn str2atom_expr(input: &str) -> AtomExpr {
-    match parser::atom_expr_p::<parser::ApsParserKind>(input) {
+pub fn str2atom(input: &str) -> Atom {
+    match parser::toplevel_atom_p::<parser::ApsParserKind>(input) {
         Ok(("", expr)) => expr,
         Ok((rest, parsed)) => panic!(
-            " Failed to parse whole expression:\n'{}'\nParsed (expr) :\n{:#?}\n",
+            " Failed to parse entirety of atom:\nRest: <<{}>>\nParsed (expr) :\n{:#?}\n",
             rest, parsed
         ),
-        Err(err) => panic!(" Failed to parse expression:\n{:#?}", err),
+        Err(err) => panic!(" Failed to parse atom:\n{:#?}", err),
     }
 }

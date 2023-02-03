@@ -1,7 +1,7 @@
 // Rules of +, - and * on real numbers
 
 #use examples/plus.apsl
-#use examples/mult.apsl
+#use examples/mul.apsl
 #use examples/power.apsl
 
 K :: R ;
@@ -9,8 +9,6 @@ K :: R ;
 _ :: {
     // Distributivity
     A * (B + C) = (A * B) + (A * C) ;
-    // Times two
-    A * 2 = A + A ;
-    // Power of two
-    A ^ 2 = A * A ;
 }
+
+// in repl: prove (A + B) ^ 2 = (A ^ 2) + (2 * A * B) + (B ^ 2)
