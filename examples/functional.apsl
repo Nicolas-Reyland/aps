@@ -5,17 +5,17 @@
 }
 
 * lr :: {
-    mult(A, B) = A * B ;
-    mult(A, B) = mult(B, A) ;
-    mult(mult(A, B), C) = mult(A, mult(B, C)) ;
+    mul(A, B) = A * B ;
+    mul(A, B) = mul(B, A) ;
+    mul(mul(A, B), C) = mul(A, mul(B, C)) ;
 }
 
 _ :: {
     // Distributivity
-    mult(A, add(B, C)) = add(mult(A, B), mult(A, C)) ;
+    mul(A, add(B, C)) = add(mul(A, B), mul(A, C)) ;
     // Useful
-    add(A, A) = mult(2, A) ;
+    add(A, A) = mul(2, A) ;
 }
 
-square :: A -> mult(A, A) ;
-double :: A -> mult(2, A) ;
+square :: A -> mul(A, A) ;
+double :: A -> mul(2, A) ;

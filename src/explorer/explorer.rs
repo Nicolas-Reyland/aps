@@ -555,6 +555,7 @@ fn left_to_right_match_once_sequential(
     }
 }
 
+/// Example : match "(A * A) * A" to "# * : N : A #"
 fn left_to_right_match_expr_to_sequential(
     expr_a: &AtomExpr,
     seq_expr_b: &SequentialExpr,
@@ -563,7 +564,6 @@ fn left_to_right_match_expr_to_sequential(
     // we should only match more than 2 times (included), since matching one time is already
     // handled previously (see left_to_right_match_to_sequential)
     // enumerator can only be an Atom::Symbol or Atom::Special for an expression to match against it
-    eprintln!("matching (expr) {} to (seq) {}", expr_a, seq_expr_b);
     if expr_a.operator != Some(seq_expr_b.operator.clone()) {
         return None;
     }
