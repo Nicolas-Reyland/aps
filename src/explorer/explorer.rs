@@ -3,7 +3,7 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt,
-    thread::{self, JoinHandle},
+    sync::mpsc::channel,
     vec,
 };
 
@@ -13,14 +13,15 @@ use crate::parser::{
     parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr,
     SequentialExpr,
 };
+use crate::threads::*;
 
 #[derive(Debug, Clone)]
-pub struct ExprGraph {
-    pub nodes: Vec<ExprNode>,
+pub struct AtomGraph {
+    pub nodes: Vec<GraphNode>,
     max_depth: u8,
 }
 
-impl fmt::Display for ExprGraph {
+impl fmt::Display for AtomGraph {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ExprGraph (max_depth: {}) {{\n", self.max_depth)?;
         for node in &self.nodes {
@@ -30,27 +31,27 @@ impl fmt::Display for ExprGraph {
     }
 }
 
-type ExprNodeIndex = usize;
+pub type GraphNodeIndex = usize;
 
 #[derive(Debug, Clone, Hash)]
-pub struct ExprNode {
+pub struct GraphNode {
     // TODO: make atom_expr a parser::Atom, since
     // one should be able to ask for a prove such as "A * B = 0"
     pub atom: Atom,
     pub transform: Option<AlgebraicProperty>,
-    pub parent: ExprNodeIndex,
-    pub index: ExprNodeIndex,
+    pub parent: GraphNodeIndex,
+    pub index: GraphNodeIndex,
     pub depth: u8,
 }
 
-impl PartialEq for ExprNode {
+impl PartialEq for GraphNode {
     fn eq(&self, other: &Self) -> bool {
         // not comparing neighbours, nor depths
         self.atom == other.atom
     }
 }
 
-impl fmt::Display for ExprNode {
+impl fmt::Display for GraphNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -71,15 +72,15 @@ impl fmt::Display for ExprNode {
 pub type Atom2AtomHashMap = HashMap<Atom, Atom>;
 
 /// init a expression-graph
-pub fn init_graph(atom: Atom) -> ExprGraph {
-    let base_node = ExprNode {
+pub fn init_graph(atom: Atom) -> AtomGraph {
+    let base_node = GraphNode {
         atom,
         parent: 0,
         transform: None,
         depth: 0,
         index: 0,
     };
-    let graph = ExprGraph {
+    let graph = AtomGraph {
         nodes: vec![base_node],
         max_depth: 0,
     };
@@ -93,76 +94,32 @@ pub fn init_graph(atom: Atom) -> ExprGraph {
 ///
 /// The returned value is the number of new nodes that were added
 pub fn explore_graph(
-    graph: &mut ExprGraph,
+    graph: &mut AtomGraph,
     properties: &HashSet<AlgebraicProperty>,
     associativities: &AssociativityHashMap,
 ) -> bool {
     // apply every property to all the outer-layer nodes of the graph
-    let mut new_nodes: Vec<(ExprNode, ExprNode)> = Vec::new();
-    let mut handles: Vec<JoinHandle<(AlgebraicProperty, usize, HashSet<Atom>)>> = Vec::new();
+    let mut new_nodes: Vec<(GraphNode, GraphNode)> = Vec::new();
+    // currently running threads
+    let mut handles: Vec<ExplorationHandle> = Vec::new();
+    // MPSC channel
+    let (sender, receiver) = channel();
+    // explore each node of the graph outer-layer
     for node in graph
         .nodes
         .iter()
         .filter(|node| node.depth == graph.max_depth)
     {
-        // get some info about that node
-        let (node_has_transform, node_transform) = match &node.transform {
-            Some(node_tr) => (true, node_tr.clone()),
-            None => (false, {
-                let empty_atom = Atom::Parenthesized(AtomExpr {
-                    atoms: vec![],
-                    operator: None,
-                });
-                AlgebraicProperty {
-                    left_atom: empty_atom.clone(),
-                    right_atom: empty_atom,
-                }
-            }),
-        };
-        // filter :
-        // Skip the rounds that would simply 'go back' one iteration.
-        // Here is an example: let 1@"X + Y" -> 2@"Y + Z" be two connected nodes
-        // The transformation from 1 to 2 is "A + B = B + A". We don't want
-        // to run this transformation again on 2 ("Y + X"),
-        // since it will only give 1 back ("X + Y"), where we came from.
-        for property in properties
-            .iter()
-            .filter(|property| !node_has_transform || node_transform != **property)
-        {
-            // one thread per exploration
-            // maybe batch jobs together using worker threads later ?
-            handles.push({
-                let atom_clone = node.atom.clone();
-                let property_clone = property.clone();
-                let associativities_clone = associativities.clone();
-                let node_index = node.index;
-                thread::spawn(move || {
-                    (
-                        property_clone.clone(),
-                        node_index,
-                        apply_property(&atom_clone, &property_clone, &associativities_clone),
-                    )
-                })
-            });
+        for property in get_relevant_properties(&node, properties) {
+            // collect all the finished thread results
+            collect_finished_threads(&receiver, graph, &mut new_nodes, &mut handles);
+            // wait until we can start a new thread
+            wait_for_next_thread(&receiver, graph, &mut new_nodes, &mut handles);
+            // start a new thread, for this property matching
+            explore_property(&sender, node, property, associativities, &mut handles);
         }
     }
-    // join all the handles
-    for handle in handles {
-        let (property, node_index, new_expressions) = handle.join().unwrap();
-        let node = &graph.nodes[node_index];
-        new_nodes.extend(new_expressions.iter().map(|new_atom| {
-            (
-                node.clone(),
-                ExprNode {
-                    atom: new_atom.clone(),
-                    parent: 0,
-                    transform: Some(property.clone()),
-                    depth: 0,
-                    index: 0,
-                },
-            )
-        }));
-    }
+    collect_all_remaining_threads(&receiver, graph, &mut new_nodes, &mut handles);
     // add new nodes, etc
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
@@ -187,7 +144,37 @@ pub fn explore_graph(
     at_least_one_new_node
 }
 
-pub fn print_graph_dot_format(graph: &ExprGraph) -> String {
+/// Skip the rounds that would simply 'go back' one iteration.
+/// Here is an example: let 1@"X + Y" -> 2@"Y + Z" be two connected nodes
+/// The transformation from 1 to 2 is "A + B = B + A". We don't want
+/// to run this transformation again on 2 ("Y + X"),
+/// since it will only give 1 back ("X + Y"), where we came from.
+fn get_relevant_properties(
+    node: &GraphNode,
+    properties: &HashSet<AlgebraicProperty>,
+) -> HashSet<AlgebraicProperty> {
+    // get some info about that node
+    let (node_has_transform, node_transform) = match &node.transform {
+        Some(node_tr) => (true, node_tr.clone()),
+        None => (false, {
+            let empty_atom = Atom::Parenthesized(AtomExpr {
+                atoms: vec![],
+                operator: None,
+            });
+            AlgebraicProperty {
+                left_atom: empty_atom.clone(),
+                right_atom: empty_atom,
+            }
+        }),
+    };
+    properties
+        .clone()
+        .into_iter()
+        .filter(|property| !node_has_transform || node_transform != *property)
+        .collect()
+}
+
+pub fn print_graph_dot_format(graph: &AtomGraph) -> String {
     let mut content = String::new();
     content.push_str("/* DOT FORMAT START */\n");
     // start printing the graph
@@ -200,7 +187,7 @@ pub fn print_graph_dot_format(graph: &ExprGraph) -> String {
     content
 }
 
-fn print_node_dot_format(node: &ExprNode) -> String {
+fn print_node_dot_format(node: &GraphNode) -> String {
     let mut content = String::new();
     // start printing definition line
     content.push_str(&format!(

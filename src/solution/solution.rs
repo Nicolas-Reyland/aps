@@ -9,7 +9,7 @@ use std::{
 
 use crate::clothing::{dress_up_expr, strip_expr_naked};
 use crate::{
-    explorer::{explore_graph, init_graph, ExprGraph, ExprNode},
+    explorer::{explore_graph, init_graph, AtomGraph, GraphNode},
     parser::{AlgebraicProperty, AssociativityHashMap, Atom, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
@@ -32,9 +32,9 @@ pub fn solve_equality(
     // number of explorations
     let mut depth: usize = 0;
     loop {
-        let lnodes: Vec<(ExprNode, Atom)> =
+        let lnodes: Vec<(GraphNode, Atom)> =
             gather_nodes_from_graph(&left_mutex, associativities, depth as u8);
-        let rnodes: Vec<(ExprNode, Atom)> =
+        let rnodes: Vec<(GraphNode, Atom)> =
             gather_nodes_from_graph(&right_mutex, associativities, depth as u8);
         // look for a common element
         for (lnode, naked_lexpr) in lnodes {
@@ -82,17 +82,17 @@ pub fn solve_equality(
     None
 }
 
-fn num_nodes_left_in_graph(left_mutex: &Arc<Mutex<ExprGraph>>) -> usize {
+fn num_nodes_left_in_graph(left_mutex: &Arc<Mutex<AtomGraph>>) -> usize {
     let left_mutex_clone = Arc::clone(&left_mutex);
     let left_clone = (*left_mutex_clone.lock().unwrap()).clone();
     left_clone.nodes.len()
 }
 
 fn gather_nodes_from_graph(
-    left_mutex: &Arc<Mutex<ExprGraph>>,
+    left_mutex: &Arc<Mutex<AtomGraph>>,
     operators: &AssociativityHashMap,
     _depth: u8,
-) -> Vec<(ExprNode, Atom)> {
+) -> Vec<(GraphNode, Atom)> {
     let mutex_clone = Arc::clone(&left_mutex);
     let clone = (*mutex_clone.lock().unwrap()).clone();
     clone
@@ -105,7 +105,7 @@ fn gather_nodes_from_graph(
 
 fn start_graph_exploration(
     properties: &HashSet<AlgebraicProperty>,
-    left_mutex: &Arc<Mutex<ExprGraph>>,
+    left_mutex: &Arc<Mutex<AtomGraph>>,
     associativities: &AssociativityHashMap,
 ) -> JoinHandle<bool> {
     // clone things
@@ -129,10 +129,10 @@ fn start_graph_exploration(
 /// path (route) is the shortest possible route between the two root nodes
 /// (with the given properties).
 fn find_route(
-    left: &ExprGraph,
-    right: &ExprGraph,
-    lcommon: &ExprNode,
-    rcommon: &ExprNode,
+    left: &AtomGraph,
+    right: &AtomGraph,
+    lcommon: &GraphNode,
+    rcommon: &GraphNode,
 ) -> Vec<(Atom, Option<AlgebraicProperty>, bool)> {
     // final route
     let mut route: Vec<(Atom, Option<AlgebraicProperty>, bool)> = Vec::new();
