@@ -268,7 +268,6 @@ pub fn match_and_apply(
     match left_to_right_match(src, left, associativities) {
         // use right atom as-is
         Some(None) => {
-            eprintln!("adding right as-is: {}", right);
             new_atoms.insert(right.clone());
             ()
         }

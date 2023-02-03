@@ -47,6 +47,14 @@ impl PartialEq for Atom {
     }
 }
 
+pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
+    if expr.atoms.len() == 1 {
+        expr.atoms.first().unwrap().clone()
+    } else {
+        Atom::Parenthesized(expr)
+    }
+}
+
 impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -59,11 +67,12 @@ impl fmt::Display for Atom {
     }
 }
 
-pub fn parenthesized_atom(expr: AtomExpr) -> Atom {
-    if expr.atoms.len() == 1 {
-        return expr.atoms.first().unwrap().clone();
+pub fn format_toplevel_atom(atom: &Atom) -> String {
+    match atom {
+        // without parentheses
+        Atom::Parenthesized(expr) => format!("{}", expr),
+        _ => format!("{}", atom),
     }
-    Atom::Parenthesized(expr)
 }
 
 #[derive(Debug, Clone, Hash, Eq)]
@@ -156,9 +165,9 @@ impl fmt::Display for FunctionCallExpr {
         write!(f, "{}(", self.name)?;
         match self.args.first() {
             Some(arg) => {
-                write!(f, "{}", arg)?;
+                write!(f, "{}", format_toplevel_atom(arg))?;
                 for next_arg in self.args.iter().skip(1) {
-                    write!(f, ", {}", next_arg)?;
+                    write!(f, ", {}", format_toplevel_atom(next_arg))?;
                 }
             }
             None => (),
@@ -179,7 +188,9 @@ impl fmt::Display for SequentialExpr {
         write!(
             f,
             "# {} : {} : {} #",
-            self.operator, self.enumerator, self.body
+            self.operator,
+            format_toplevel_atom(&self.enumerator),
+            format_toplevel_atom(&self.body)
         )
     }
 }
@@ -200,7 +211,12 @@ pub struct AlgebraicProperty {
 
 impl fmt::Display for AlgebraicProperty {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} = {}", self.left_atom, self.right_atom)
+        write!(
+            f,
+            "{} = {}",
+            format_toplevel_atom(&self.left_atom),
+            format_toplevel_atom(&self.right_atom)
+        )
     }
 }
 
@@ -213,10 +229,16 @@ pub struct AlgebraicFunction {
 
 impl fmt::Display for AlgebraicFunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} :: {}", self.name, self.arg_atoms.first().unwrap())?;
-        for arg_atom in self.arg_atoms.iter().skip(1) {
-            write!(f, ", {}", arg_atom)?;
-        }
+        write!(f, "{} ::", self.name)?;
+        match self.arg_atoms.first() {
+            Some(first_arg) => {
+                write!(f, " {}", format_toplevel_atom(first_arg))?;
+                for arg_atom in self.arg_atoms.iter().skip(1) {
+                    write!(f, ", {}", format_toplevel_atom(arg_atom))?;
+                }
+            }
+            None => (),
+        };
         write!(f, " -> {}", self.value_atom)
     }
 }

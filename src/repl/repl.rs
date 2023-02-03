@@ -1,5 +1,6 @@
 // APS Repl
 
+use crate::parser::format_toplevel_atom;
 use crate::{
     clothing::strip_expr_naked,
     explorer::{explore_graph, init_graph, print_graph_dot_format},
@@ -289,7 +290,7 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
     // build solution string
     let mut solution_str = format!(" Solution found for {} :\n", property);
     let (first_expr, _, _) = solution.first().unwrap(); // no transform for the base expr
-    solution_str.push_str(&format!("  {}\n", first_expr));
+    solution_str.push_str(&format!("  {}\n", format_toplevel_atom(first_expr)));
     if solution.len() < 2 {
         return Some(solution_str);
     }
@@ -299,12 +300,13 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
     let solution_contents: Vec<(String, String, String)> = solution
         .iter()
         .skip(1)
-        .map(|(expr, rule, common)| {
+        .map(|(atom, rule, common)| {
             // Stringify expression
             let expr_str = if context.pretty_print_steps {
-                strip_expr_naked(expr, &context.associativities).to_string()
+                let naked_atom = strip_expr_naked(atom, &context.associativities);
+                format_toplevel_atom(&naked_atom)
             } else {
-                expr.to_string()
+                format_toplevel_atom(&atom)
             };
             // Stringify rule
             let rule_str = match rule {

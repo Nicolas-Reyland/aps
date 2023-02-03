@@ -33,8 +33,8 @@ macro_rules! parse_property {
 macro_rules! show_atom_iterable {
     ($atoms:expr) => {{
         let mut s = String::new();
-        for atom in $atoms {
-            s.push_str(&format!(" - {}\n", atom));
+        for atom in &$atoms {
+            s.push_str(&format!(" - {}\n", format_toplevel_atom(atom)));
         }
         s
     }};
