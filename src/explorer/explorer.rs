@@ -256,7 +256,7 @@ pub fn apply_property(
 /// this returns a vector containing zero (if there is no match) or multiple (there is a match) new expressions
 /// this can yield multiple new expressions, because the source expression if checked for matching, but also all
 /// its 'sub-expressions' (including arguments of function calls)
-fn match_and_apply(
+pub fn match_and_apply(
     src: &Atom,
     left: &Atom,
     right: &Atom,
@@ -268,6 +268,7 @@ fn match_and_apply(
     match left_to_right_match(src, left, associativities) {
         // use right atom as-is
         Some(None) => {
+            eprintln!("adding right as-is: {}", right);
             new_atoms.insert(right.clone());
             ()
         }
@@ -280,14 +281,12 @@ fn match_and_apply(
     // recursively call 'match_and_apply' on all sorts of sub-expressions
     // these are: expressions, function-call-args
     // all atom types are 'penetrated' (also sequential-expressions)
-    /*
     new_atoms.extend(match_and_apply_all_sub_expressions(
         src,
         left,
         right,
         associativities,
     ));
-     */
 
     new_atoms
 }
@@ -390,19 +389,19 @@ fn left_to_right_match_expressions(
     src_expr: &AtomExpr,  // source expression
     dest_expr: &AtomExpr, // expression to match against
     associativities: &AssociativityHashMap,
-) -> Option<Atom2AtomHashMap> {
-    // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
-    let mut mappings: Atom2AtomHashMap = HashMap::new();
+) -> Option<Option<Atom2AtomHashMap>> {
     // check the two operators
     if src_expr.operator != dest_expr.operator || src_expr.atoms.len() != dest_expr.atoms.len() {
         return None;
     }
-    'main_loop: for (atom_a, atom_b) in src_expr.atoms.iter().zip(dest_expr.atoms.iter()) {
-        // compare atoms
-        match left_to_right_match(atom_a, atom_b, associativities) {
+    // mappings of atom-to-atom between src_expr and (p_expr/v_expr)
+    let mut mappings: Atom2AtomHashMap = HashMap::new();
+    // left-to-right-match atoms one-by-one
+    for (sub_src_atom, sub_dest_atom) in src_expr.atoms.iter().zip(dest_expr.atoms.clone()) {
+        match left_to_right_match(&sub_src_atom, &sub_dest_atom, associativities) {
             Some(None) => (),
-            Some(Some(par_mappings)) => {
-                for (key, value) in par_mappings {
+            Some(Some(new_mappings)) => {
+                for (key, value) in new_mappings {
                     match mappings.insert(key, value.clone()) {
                         None => (),
                         Some(old_value) => {
@@ -413,23 +412,16 @@ fn left_to_right_match_expressions(
                         }
                     }
                 }
-                continue 'main_loop;
             }
             None => return None,
         }
-        // check with already-existing mapping, or insert as new mapping
-        match mappings.get(atom_b) {
-            Some(atom_c) => {
-                // atom_c should be equal to atom_a
-                if atom_c != atom_a {
-                    return None;
-                }
-            }
-            None => assert_eq!(mappings.insert(atom_b.clone(), atom_a.clone()), None),
-        }
-        // go to next (operator, atom) pair
     }
-    Some(mappings)
+
+    Some(if mappings.is_empty() {
+        None
+    } else {
+        Some(mappings)
+    })
 }
 
 /// Is atom_a mappable on atom_b ?
@@ -450,16 +442,21 @@ fn left_to_right_match(
     match atom_b {
         Atom::Parenthesized(par_b) => match atom_a {
             Atom::Parenthesized(par_a) => {
-                match left_to_right_match_expressions(par_a, par_b, associativities) {
-                    Some(par_mappings) => Some(Some(par_mappings)),
-                    None => None,
-                }
+                left_to_right_match_expressions(par_a, par_b, associativities)
             }
             _ => None,
         },
-        Atom::Symbol(_) => Some(None),
-        Atom::Value(_) if atom_a == atom_b => Some(None),
-        Atom::Value(_) => None,
+        Atom::Symbol(_) => Some(Some(
+            // map atom_b to whatever atom_a is
+            vec![(atom_b.clone(), atom_a.clone())].into_iter().collect(),
+        )),
+        Atom::Value(_) => {
+            if atom_a == atom_b {
+                Some(None)
+            } else {
+                None
+            }
+        }
         Atom::FunctionCall(fn_call_b) => match atom_a {
             // a function call is only mappable to the same function call, with each argument
             // being mappable to it's alter-atom
@@ -566,6 +563,7 @@ fn left_to_right_match_expr_to_sequential(
     // we should only match more than 2 times (included), since matching one time is already
     // handled previously (see left_to_right_match_to_sequential)
     // enumerator can only be an Atom::Symbol or Atom::Special for an expression to match against it
+    eprintln!("matching (expr) {} to (seq) {}", expr_a, seq_expr_b);
     if expr_a.operator != Some(seq_expr_b.operator.clone()) {
         return None;
     }

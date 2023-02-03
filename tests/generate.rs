@@ -58,13 +58,13 @@ fn generate_expr() {
     assert_eq_generation!(
         "X + Y",
         "1 + 2",
-        vec![("X", "1"),("Y", "2"),],
+        vec![("X", "1"), ("Y", "2"),],
         &default_associativities()
     );
     assert_eq_generation!(
         "X + (Y + 3)",
         "1 + (2 + 3)",
-        vec![("X", "1"),("Y", "2"),],
+        vec![("X", "1"), ("Y", "2"),],
         &default_associativities()
     );
 }
