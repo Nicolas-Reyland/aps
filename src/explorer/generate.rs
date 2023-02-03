@@ -1,8 +1,4 @@
-use crate::{
-    parser::*,
-    explorer::*,
-    clothing::dress_up_expr,
-};
+use crate::{clothing::dress_up_expr, explorer::*, parser::*};
 
 /// Generate new expression using source, value-expression and mappings
 /// mappings matches atom-names from the source-expression to the ones in the value-expression (and vice-versa)
@@ -43,22 +39,22 @@ fn generate_expression(
 ) -> Atom {
     // init new atoms and operator
     let mut atoms: Vec<Atom> = Vec::new();
-    let operator: Option<Operator> = scheme_expr.operator.clone();
     // match each atom of the v-expr
     let num_scheme_atoms = scheme_expr.atoms.len();
     let mut i = 0;
-    //println!("Mappings:\n{:#?}\n", mappings);
-    /* 'main_loop: */
+    // println!("Mappings:\n{:#?}\n", mappings);
     while i < num_scheme_atoms {
         let scheme = &scheme_expr.atoms[i];
-
         // normal mapping
         atoms.push(generate_atom(scheme, mappings, associativities));
-
+        // this will surely change ...
         i += 1;
     }
 
-    parenthesized_atom(AtomExpr { atoms, operator })
+    parenthesized_atom(AtomExpr {
+        atoms,
+        operator: scheme_expr.operator.clone(),
+    })
 }
 
 fn generate_sequential(

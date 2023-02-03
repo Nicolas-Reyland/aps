@@ -7,12 +7,12 @@ use std::{
     vec,
 };
 
+use crate::clothing::strip_expr_naked;
+use crate::generate::generate_atom;
 use crate::parser::{
     parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr,
     SequentialExpr,
 };
-use crate::clothing::strip_expr_naked;
-use crate::generate::generate_atom;
 
 #[derive(Debug, Clone)]
 pub struct ExprGraph {

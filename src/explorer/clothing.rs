@@ -1,6 +1,6 @@
 use crate::explorer::atom2atom_expr;
-use crate::parser::*;
 use crate::parser::OperatorAssociativity::*;
+use crate::parser::*;
 
 /// Strips the expression naked.
 /// Removes parentheses for easier and faster comparison.

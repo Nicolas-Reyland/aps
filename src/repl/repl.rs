@@ -1,14 +1,14 @@
 // APS Repl
 
 use crate::{
+    clothing::strip_expr_naked,
     explorer::{explore_graph, init_graph, print_graph_dot_format},
     parser::{
         self, split_algebraic_objects, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap,
-        Atom, KProperty, FunctionCallExpr,
+        Atom, FunctionCallExpr, KProperty,
     },
     preprocessor::read_and_preprocess_file,
     solution::solve_equality,
-    clothing::strip_expr_naked,
 };
 use divrem::DivCeil;
 use reedline_repl_rs::{
