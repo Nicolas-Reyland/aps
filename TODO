@@ -1,13 +1,8 @@
 Todo List :
 - general: optimize everything
-- tests: write new parsing tests (once new grammar is worked out)
 - solution: only iterate over  graph "outer layer" (doesn't seem to work somehow)
 - parser: atom symbols can be longer than one char
 - parser: add real operator priority, where "2 * A + 3" would be legal
   and would be translated to "(2 * A) + 3" if '*' happened to have a higher
   priority than '+'
 - repl: ability to re-print last proof (after settings expr-pretty-print <action>)
-- exploration: maximum number of threads allowed
-  currently, all threads for property-matching are started at the same time, then are
-  all joined at the end.
-  there should be a loop, only allowing N max threads to run, adding and joining.
