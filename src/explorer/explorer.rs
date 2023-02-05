@@ -23,7 +23,7 @@ pub struct AtomGraph {
 
 impl fmt::Display for AtomGraph {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ExprGraph (max_depth: {}) {{\n", self.max_depth)?;
+        write!(f, "AtomGraph (max_depth: {}) {{\n", self.max_depth)?;
         for node in &self.nodes {
             write!(f, "\t{},\n", node)?;
         }
@@ -87,10 +87,12 @@ pub fn init_graph(atom: Atom) -> AtomGraph {
     graph
 }
 
+/// Is the 'atom' contained in a node of the 'graph' ?
 pub fn graph_contains_atom(graph: &AtomGraph, atom: &Atom) -> bool {
     graph.nodes.iter().any(|node| node.atom == *atom)
 }
 
+/// Does the 'new_nodes' vector contain 'atom' as a new-node (second item of the tuple)
 pub fn new_nodes_contain_atom(new_nodes: &Vec<(GraphNode, GraphNode)>, atom: &Atom) -> bool {
     new_nodes.iter().any(|(_, node)| node.atom == *atom)
 }
@@ -152,18 +154,19 @@ pub fn explore_graph(
     // add new nodes, etc
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
-    for (src_node, mut new_node) in new_nodes {
-        at_least_one_new_node = true;
-        // add source node to the new node's neighbours
-        new_node.parent = src_node.index;
-        // set the depth of the new node
-        new_node.depth = src_node.depth + 1;
-        // set the index of the new node
-        new_node.index = new_node_index;
-        new_node_index += 1;
-        // add new node to graph
-        graph.nodes.push(new_node)
-    }
+    graph.nodes.extend(
+        new_nodes.into_iter().map(|(src_node, mut new_node)| {
+            at_least_one_new_node = true;
+            // add source node to the new node's neighbours
+            new_node.parent = src_node.index;
+            // set the depth of the new node
+            new_node.depth = src_node.depth + 1;
+            // set the index of the new node
+            new_node.index = new_node_index;
+            new_node_index += 1;
+            new_node
+        })
+    );
     if at_least_one_new_node {
         graph.max_depth += 1;
     }
