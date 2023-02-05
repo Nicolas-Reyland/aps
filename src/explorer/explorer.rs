@@ -9,10 +9,7 @@ use std::{
 
 use crate::clothing::strip_expr_naked;
 use crate::generate::generate_atom;
-use crate::parser::{
-    parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr,
-    SequentialExpr,
-};
+use crate::parser::{parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr, SequentialExpr, format_toplevel_atom};
 use crate::threads::*;
 
 #[derive(Debug, Clone)]
@@ -228,7 +225,7 @@ fn print_node_dot_format(node: &GraphNode) -> String {
         if node.index == 0 { "red" } else { "blue" }
     ));
     // print label of node
-    content.push_str(&format!("{}", node.atom));
+    content.push_str(format_toplevel_atom(&node.atom).as_str());
     // end printing definition line
     content.push_str(&format!("\"];\n"));
 

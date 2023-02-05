@@ -348,10 +348,10 @@ pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Op
         context.auto_break,
     ) {
         Some(solution) => solution,
-        None => return Some(format!(" No solution found for {}", property)),
+        None => return Some(format!(" No proof found for {}", property)),
     };
     // build solution string
-    let mut solution_str = format!(" Solution found for {} :\n", property);
+    let mut solution_str = format!(" Proof found for {} :\n", property);
     let (first_expr, _, _) = solution.first().unwrap(); // no transform for the base expr
     solution_str.push_str(&format!("  {}\n", format_toplevel_atom(first_expr)));
     if solution.len() < 2 {

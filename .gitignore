@@ -12,3 +12,7 @@ Cargo.lock
 # CLion stuff
 .idea/
 
+# Graphs
+*.dot
+*.svg
+
