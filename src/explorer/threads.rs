@@ -1,5 +1,8 @@
 use crate::{
-    explorer::{apply_property, AtomGraph, GraphNode, GraphNodeIndex},
+    explorer::{
+        apply_property, graph_contains_atom, new_nodes_contain_atom, AtomGraph, GraphNode,
+        GraphNodeIndex,
+    },
     parser::{AlgebraicProperty, AssociativityHashMap, Atom},
 };
 use std::{
@@ -23,9 +26,7 @@ pub fn wait_for_next_thread(
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
     handles: &Vec<ExplorationHandle>,
 ) -> i32 {
-    println!("Number of running threads: {}", handles.len());
     if handles.len() >= MAX_NUM_THREADS_PER_EXPLORATION {
-        println!("Waiting for a thread to finish ... ({})", handles.len());
         // wait for one thread to finish
         collect_once(receiver, graph, new_nodes);
         1
@@ -65,24 +66,16 @@ pub fn collect_all_remaining_threads(
     handles: Vec<ExplorationHandle>,
 ) {
     // join all the handles
-    let mut num_threads = handles.len();
     for handle in handles {
-        println!(
-            "Joining final handles {} -> {}...",
-            num_threads,
-            num_threads - 1
-        );
         handle
             .join()
             .unwrap()
             .expect("Could not join remaining handle");
-        println!("early_collections: {}", early_collections);
         if early_collections != 0 {
             early_collections -= 1;
         } else {
             collect_once(receiver, graph, new_nodes)
         };
-        num_threads -= 1;
     }
 }
 
@@ -91,19 +84,23 @@ pub fn collect_once(
     graph: &AtomGraph,
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
 ) {
-    println!("Collecting once ({})", new_nodes.len());
-    let (property, node_index, new_expressions) =
+    let (property, node_index, mut new_atoms) =
         receiver.recv_timeout(Duration::from_millis(1000)).unwrap();
-    println!("Received ({}, {})", property, node_index);
-    for expr in &new_expressions {
-        println!("({}) - {}", node_index, expr);
-    }
+    // filter out the generated atoms that are already in the graph
+    new_atoms = new_atoms
+        .into_iter()
+        .filter(|new_atom| {
+            !graph_contains_atom(graph, new_atom) && !new_nodes_contain_atom(new_nodes, new_atom)
+        })
+        .collect();
+    // source node
     let node = &graph.nodes[node_index];
-    new_nodes.extend(new_expressions.iter().map(|new_atom| {
+    // add all new nodes to graph
+    new_nodes.extend(new_atoms.into_iter().map(|new_atom| {
         (
             node.clone(),
             GraphNode {
-                atom: new_atom.clone(),
+                atom: new_atom,
                 parent: 0,
                 transform: Some(property.clone()),
                 depth: 0,

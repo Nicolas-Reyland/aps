@@ -87,6 +87,14 @@ pub fn init_graph(atom: Atom) -> AtomGraph {
     graph
 }
 
+pub fn graph_contains_atom(graph: &AtomGraph, atom: &Atom) -> bool {
+    graph.nodes.iter().any(|node| node.atom == *atom)
+}
+
+pub fn new_nodes_contain_atom(new_nodes: &Vec<(GraphNode, GraphNode)>, atom: &Atom) -> bool {
+    new_nodes.iter().any(|(_, node)| node.atom == *atom)
+}
+
 /// Explore a Graph once
 ///
 /// Exploring a graph means to apply all applicable
@@ -114,29 +122,20 @@ pub fn explore_graph(
         for property in get_relevant_properties(&node, properties) {
             // wait until we can start a new thread
             early_collections += wait_for_next_thread(&receiver, graph, &mut new_nodes, &handles);
-            println!("early_collections: {}", early_collections);
             // remove_deprecated_handles!(receiver, graph, new_nodes, handles, deprecated_handles);
             let mut num_threads = handles.len();
             handles = handles
                 .into_iter()
                 .filter_map(|handle| {
                     if handle.is_finished() {
-                        println!(
-                            "END THREAD {} -> {} ({})",
-                            num_threads,
-                            num_threads - 1,
-                            early_collections
-                        );
                         num_threads -= 1;
                         handle
                             .join()
                             .unwrap()
                             .expect(&format!("Could not join handle"));
                         if early_collections != 0 {
-                            println!("Skipping collection ({})", num_threads);
                             early_collections -= 1;
                         } else {
-                            println!("loop-collected: {}", early_collections);
                             collect_once(&receiver, &graph, &mut new_nodes);
                         }
                         None
@@ -145,12 +144,6 @@ pub fn explore_graph(
                     }
                 })
                 .collect();
-            println!(
-                "START THREAD ({}) {} -> {}",
-                num_threads,
-                handles.len(),
-                handles.len() + 1
-            );
             // start a new thread, for this property matching
             explore_property(&sender, node, property, associativities, &mut handles);
         }
@@ -160,18 +153,16 @@ pub fn explore_graph(
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
     for (src_node, mut new_node) in new_nodes {
-        if !graph.nodes.contains(&new_node) {
-            at_least_one_new_node = true;
-            // add source node to the new node's neighbours
-            new_node.parent = src_node.index;
-            // set the depth of the new node
-            new_node.depth = src_node.depth + 1;
-            // set the index of the new node
-            new_node.index = new_node_index;
-            new_node_index += 1;
-            // add new node to graph
-            graph.nodes.push(new_node)
-        }
+        at_least_one_new_node = true;
+        // add source node to the new node's neighbours
+        new_node.parent = src_node.index;
+        // set the depth of the new node
+        new_node.depth = src_node.depth + 1;
+        // set the index of the new node
+        new_node.index = new_node_index;
+        new_node_index += 1;
+        // add new node to graph
+        graph.nodes.push(new_node)
     }
     if at_least_one_new_node {
         graph.max_depth += 1;
