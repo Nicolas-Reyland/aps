@@ -15,9 +15,9 @@ use std::{
 pub type ExplorationResult = (AlgebraicProperty, GraphNodeIndex, HashSet<Atom>);
 pub type ExplorationHandle = JoinHandle<Result<(), SendError<ExplorationResult>>>;
 
-// number od CPU core that I have. this would result in 2 * MAX_NUM_THREADS_PER_EXPLORATION threads in total
-// TODO: make this N * num-cpu-cores (value of N ??)
-static MAX_NUM_THREADS_PER_EXPLORATION: usize = 6;
+// Results in 2 * MAX_NUM_THREADS_PER_EXPLORATION threads in total
+// (two graph explorations in parallel)
+pub static mut MAX_NUM_THREADS_PER_EXPLORATION: usize = 4;
 
 /// Returns 1 if we collected once, 0 otherwise
 pub fn wait_for_next_thread(
@@ -26,7 +26,12 @@ pub fn wait_for_next_thread(
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
     handles: &Vec<ExplorationHandle>,
 ) -> i32 {
-    if handles.len() >= MAX_NUM_THREADS_PER_EXPLORATION {
+    let num_current_threads = handles.len();
+    let wait_once: bool;
+    unsafe {
+        wait_once = num_current_threads >= MAX_NUM_THREADS_PER_EXPLORATION;
+    };
+    if wait_once {
         // wait for one thread to finish
         collect_once(receiver, graph, new_nodes);
         1
@@ -35,6 +40,7 @@ pub fn wait_for_next_thread(
     }
 }
 
+/// Explore the property, and send the result through the 'sender'
 pub fn explore_property(
     sender: &Sender<ExplorationResult>,
     node: &GraphNode,
@@ -58,6 +64,9 @@ pub fn explore_property(
     });
 }
 
+/// All threads for the current graph exploration are considered to be started.
+/// Join them all, and collect once per joining (except for 'early_collections' threads),
+/// which are considered to be already collected.
 pub fn collect_all_remaining_threads(
     receiver: &Receiver<ExplorationResult>,
     mut early_collections: i32,
@@ -79,6 +88,7 @@ pub fn collect_all_remaining_threads(
     }
 }
 
+/// Collect one result through the 'receiver'. Prune it. Add it to the new_nodes.
 pub fn collect_once(
     receiver: &Receiver<ExplorationResult>,
     graph: &AtomGraph,

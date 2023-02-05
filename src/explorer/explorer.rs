@@ -154,8 +154,9 @@ pub fn explore_graph(
     // add new nodes, etc
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
-    graph.nodes.extend(
-        new_nodes.into_iter().map(|(src_node, mut new_node)| {
+    graph
+        .nodes
+        .extend(new_nodes.into_iter().map(|(src_node, mut new_node)| {
             at_least_one_new_node = true;
             // add source node to the new node's neighbours
             new_node.parent = src_node.index;
@@ -165,8 +166,7 @@ pub fn explore_graph(
             new_node.index = new_node_index;
             new_node_index += 1;
             new_node
-        })
-    );
+        }));
     if at_least_one_new_node {
         graph.max_depth += 1;
     }
@@ -204,6 +204,7 @@ fn get_relevant_properties(
         .collect()
 }
 
+/// Generate a .dot format compliant string
 pub fn print_graph_dot_format(graph: &AtomGraph) -> String {
     let mut content = String::new();
     content.push_str("/* DOT FORMAT START */\n");
@@ -217,6 +218,7 @@ pub fn print_graph_dot_format(graph: &AtomGraph) -> String {
     content
 }
 
+/// Format a single node for the .dot format
 fn print_node_dot_format(node: &GraphNode) -> String {
     let mut content = String::new();
     // start printing definition line
@@ -308,6 +310,12 @@ pub fn match_and_apply(
     new_atoms
 }
 
+/// match and apply property on :
+/// - expressions (Atom::AtomExpr)
+/// - function call arguments (Atom::FunctionCallExpr.args)
+/// - sequential expression enumerator (Atom::Sequential.enumerator)
+/// - sequential expression body (Atom::Sequential.body)
+/// returns an empty hash set if the src atom is none of those
 fn match_and_apply_all_sub_expressions(
     src: &Atom,
     left: &Atom,
@@ -386,7 +394,19 @@ fn match_and_apply_all_sub_expressions(
     new_atoms
 }
 
-/// Returns all the possible
+/// Return a hash set of 'atoms' vectors, with each time another atom from
+/// 'new_atoms' at the position 'index'. Example :
+/// atoms: (A, B, C, D)
+/// index: 2
+/// new_atoms: {1, 4, 2, 3}
+/// Returned value :
+///     {
+///         (A, B, 2, D),
+///         (A, B, 4, D),
+///         (A, B, 3, D),
+///         (A, B, 1, D),
+///     }
+/// remember that hash sets are un-ordered
 fn multiple_replace_nth_atom(
     atoms: &Vec<Atom>,
     index: usize,
@@ -402,6 +422,7 @@ fn multiple_replace_nth_atom(
         .collect()
 }
 
+/// Left to Right matching for expressions : they must have the same 'shape'
 fn left_to_right_match_expressions(
     src_expr: &AtomExpr,  // source expression
     dest_expr: &AtomExpr, // expression to match against
@@ -544,6 +565,7 @@ fn left_to_right_match_to_sequential(
     }
 }
 
+/// An atom is actually any sequential with the enumerator set to Atom::Value(1)
 fn left_to_right_match_once_sequential(
     atom_a: &Atom,
     seq_expr_b: &SequentialExpr,
@@ -572,7 +594,7 @@ fn left_to_right_match_once_sequential(
     }
 }
 
-/// Example : match "(A * A) * A" to "# * : N : A #"
+/// Example : match "(A * A) * A" to "# * : N : A #" (or "# * : 3 : A #")
 fn left_to_right_match_expr_to_sequential(
     expr_a: &AtomExpr,
     seq_expr_b: &SequentialExpr,
@@ -649,6 +671,7 @@ fn left_to_right_match_expr_to_sequential(
     }
 }
 
+/// Match two sequentials : operator must be equal. Enumerator and body must both match
 fn left_to_right_match_sequentials(
     seq_expr_a: &SequentialExpr,
     seq_expr_b: &SequentialExpr,
@@ -710,6 +733,7 @@ fn sufficient_mappings(scheme: &Atom, mappings: &Atom2AtomHashMap) -> bool {
     }
 }
 
+/// If 'atom' is an expression itself, return it. Else, return an expression with one element: 'atom'
 pub fn atom2atom_expr(atom: Atom) -> AtomExpr {
     match atom {
         Atom::Parenthesized(expr) => expr.clone(),

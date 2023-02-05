@@ -1,9 +1,15 @@
 /* Parser for Algebraic Proofing System Language */
 
 use apsl_lang::repl::{import_into_context, init_context, repl};
+use apsl_lang::threads::MAX_NUM_THREADS_PER_EXPLORATION;
 use std::env;
 
 fn main() {
+    // set max number of threads per exploration
+    unsafe {
+        MAX_NUM_THREADS_PER_EXPLORATION = num_cpus::get() * 2;
+        println!("num threads per exploration (max): {}", MAX_NUM_THREADS_PER_EXPLORATION);
+    }
     // collect cmd args
     let args: Vec<String> = env::args().collect();
     // create repl context
