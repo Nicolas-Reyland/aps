@@ -6,6 +6,7 @@ use std::{
     collections::HashSet,
     sync::mpsc::{Receiver, SendError, Sender},
     thread::{self, JoinHandle},
+    time::Duration,
 };
 
 pub type ExplorationResult = (AlgebraicProperty, GraphNodeIndex, HashSet<Atom>);
@@ -15,26 +16,21 @@ pub type ExplorationHandle = JoinHandle<Result<(), SendError<ExplorationResult>>
 // TODO: make this N * num-cpu-cores (value of N ??)
 static MAX_NUM_THREADS_PER_EXPLORATION: usize = 6;
 
+/// Returns 1 if we collected once, 0 otherwise
 pub fn wait_for_next_thread(
     receiver: &Receiver<ExplorationResult>,
     graph: &AtomGraph,
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
-    handles: &mut Vec<ExplorationHandle>,
-) {
+    handles: &Vec<ExplorationHandle>,
+) -> i32 {
+    println!("Number of running threads: {}", handles.len());
     if handles.len() >= MAX_NUM_THREADS_PER_EXPLORATION {
+        println!("Waiting for a thread to finish ... ({})", handles.len());
         // wait for one thread to finish
         collect_once(receiver, graph, new_nodes);
-        for i in 0..handles.len() {
-            let handle: &ExplorationHandle = &handles[i];
-            if handle.is_finished() {
-                handle.join().unwrap().expect("Failed to join on handle");
-                handles.remove(i);
-                return;
-            }
-        }
-        panic!(
-            "Collect one item, but no threads have finished (where does the result come from ???)"
-        );
+        1
+    } else {
+        0
     }
 }
 
@@ -61,47 +57,48 @@ pub fn explore_property(
     });
 }
 
-pub fn collect_finished_threads(
-    receiver: &Receiver<ExplorationResult>,
-    graph: &AtomGraph,
-    new_nodes: &mut Vec<(GraphNode, GraphNode)>,
-    handles: &mut Vec<ExplorationHandle>,
-) {
-    for (i, handle) in handles.iter().enumerate() {
-        if handle.is_finished() {
-            handle.join().unwrap().expect("Failed to join on handle");
-            handles.remove(i);
-            // there HAS to be ONE message (we just joined a thread)
-            collect_once(receiver, graph, new_nodes);
-        }
-    }
-}
-
 pub fn collect_all_remaining_threads(
     receiver: &Receiver<ExplorationResult>,
+    mut early_collections: i32,
     graph: &AtomGraph,
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
-    handles: &mut Vec<ExplorationHandle>,
+    handles: Vec<ExplorationHandle>,
 ) {
     // join all the handles
+    let mut num_threads = handles.len();
     for handle in handles {
-        handle.join().unwrap();
-        collect_once(receiver, graph, new_nodes);
+        println!(
+            "Joining final handles {} -> {}...",
+            num_threads,
+            num_threads - 1
+        );
+        handle
+            .join()
+            .unwrap()
+            .expect("Could not join remaining handle");
+        println!("early_collections: {}", early_collections);
+        if early_collections != 0 {
+            early_collections -= 1;
+        } else {
+            collect_once(receiver, graph, new_nodes)
+        };
+        num_threads -= 1;
     }
-    handles.clear();
 }
 
-fn collect_once(
+pub fn collect_once(
     receiver: &Receiver<ExplorationResult>,
     graph: &AtomGraph,
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
 ) {
-    let (property, node_index, new_expressions) = receiver.recv().unwrap();
-    println!("Received ({}, {},", property, node_index);
+    println!("Collecting once ({})", new_nodes.len());
+    let (property, node_index, new_expressions) =
+        receiver.recv_timeout(Duration::from_millis(1000)).unwrap();
+    println!("Received ({}, {})", property, node_index);
     for expr in &new_expressions {
         println!("({}) - {}", node_index, expr);
     }
-    let node = graph.nodes[node_index];
+    let node = &graph.nodes[node_index];
     new_nodes.extend(new_expressions.iter().map(|new_atom| {
         (
             node.clone(),

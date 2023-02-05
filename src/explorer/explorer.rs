@@ -104,6 +104,7 @@ pub fn explore_graph(
     let mut handles: Vec<ExplorationHandle> = Vec::new();
     // MPSC channel
     let (sender, receiver) = channel();
+    let mut early_collections: i32 = 0;
     // explore each node of the graph outer-layer
     for node in graph
         .nodes
@@ -111,15 +112,50 @@ pub fn explore_graph(
         .filter(|node| node.depth == graph.max_depth)
     {
         for property in get_relevant_properties(&node, properties) {
-            // collect all the finished thread results
-            collect_finished_threads(&receiver, graph, &mut new_nodes, &mut handles);
             // wait until we can start a new thread
-            wait_for_next_thread(&receiver, graph, &mut new_nodes, &mut handles);
+            early_collections += wait_for_next_thread(&receiver, graph, &mut new_nodes, &handles);
+            println!("early_collections: {}", early_collections);
+            // remove_deprecated_handles!(receiver, graph, new_nodes, handles, deprecated_handles);
+            let mut num_threads = handles.len();
+            handles = handles
+                .into_iter()
+                .filter_map(|handle| {
+                    if handle.is_finished() {
+                        println!(
+                            "END THREAD {} -> {} ({})",
+                            num_threads,
+                            num_threads - 1,
+                            early_collections
+                        );
+                        num_threads -= 1;
+                        handle
+                            .join()
+                            .unwrap()
+                            .expect(&format!("Could not join handle"));
+                        if early_collections != 0 {
+                            println!("Skipping collection ({})", num_threads);
+                            early_collections -= 1;
+                        } else {
+                            println!("loop-collected: {}", early_collections);
+                            collect_once(&receiver, &graph, &mut new_nodes);
+                        }
+                        None
+                    } else {
+                        Some(handle)
+                    }
+                })
+                .collect();
+            println!(
+                "START THREAD ({}) {} -> {}",
+                num_threads,
+                handles.len(),
+                handles.len() + 1
+            );
             // start a new thread, for this property matching
             explore_property(&sender, node, property, associativities, &mut handles);
         }
     }
-    collect_all_remaining_threads(&receiver, graph, &mut new_nodes, &mut handles);
+    collect_all_remaining_threads(&receiver, early_collections, graph, &mut new_nodes, handles);
     // add new nodes, etc
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
