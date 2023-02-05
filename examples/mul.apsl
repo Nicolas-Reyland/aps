@@ -1,13 +1,10 @@
-* l :: {
+* lr :: {
     // Commutativity
     A * B = B * A ;
     // Associativity
     (A * B) * C = A * (B * C) ;
     // Null element
     A * 0 = 0 ;
-}
-
-_ :: {
-    // Implies the identity element as being 1 : A * 1 = A
-    A * N = # + : N : A # ;
+    // Identity element
+    A * 1 = A ;
 }

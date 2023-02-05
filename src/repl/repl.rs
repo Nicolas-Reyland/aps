@@ -1,9 +1,10 @@
 // APS Repl
 
-use crate::parser::format_toplevel_atom;
+use crate::parser::ApsParserKind;
 use crate::{
     clothing::strip_expr_naked,
     explorer::{explore_graph, init_graph, print_graph_dot_format},
+    parser::format_toplevel_atom,
     parser::{
         self, split_algebraic_objects, AlgebraicFunction, AlgebraicProperty, AssociativityHashMap,
         Atom, FunctionCallExpr, KProperty,
@@ -12,6 +13,7 @@ use crate::{
     solution::solve_equality,
 };
 use divrem::DivCeil;
+use reedline_repl_rs::Error::UnknownCommand;
 use reedline_repl_rs::{
     clap::{parser::ValuesRef, Arg, ArgMatches, Command},
     Repl, Result,
@@ -82,10 +84,11 @@ macro_rules! handle_setting {
 
 pub fn repl(context: ReplContext) {
     let mut repl = Repl::new(context)
-        .with_name("Algebraic Proof System Language ")
-        .with_version("v0.1.0")
-        .with_description("Prove algebraic statements using algebraic structures definitions")
+        .with_name("APSL ")
+        .with_version("v0.2.0")
+        .with_description("Prove algebraic statements in algebraic structures")
         .with_banner("REPL for the Algebraic Proof System Language")
+        .with_partial_completions(true)
         .with_command(
             Command::new("prove")
                 .arg(Arg::new("property").required(true).num_args(1..))
@@ -127,31 +130,95 @@ pub fn repl(context: ReplContext) {
         )
         .with_command(
             Command::new("ctx")
-                .arg(Arg::new("command").required(false).num_args(1))
-                .about("Print or clear the current context (show, clear)"),
+                .subcommand(
+                    Command::new("add")
+                        .arg(Arg::new("property").required(true).num_args(1..))
+                        .about(
+                            "Add a property to the current context (see 'def' for better options)",
+                        ),
+                )
+                .subcommand(
+                    Command::new("rem")
+                        .arg(Arg::new("property").required(true).num_args(1..))
+                        .about("Remove a property from the current context"),
+                )
+                .subcommand(Command::new("show").about("Show the current context"))
+                .subcommand(
+                    Command::new("clear")
+                        .about("Clear the current context (removes everything + resets settings)"),
+                )
+                .about("Change or print the current context"),
             ctx_callback,
         );
     repl.run().unwrap();
 }
 
 fn ctx_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
-    match args
-        .get_one::<String>("command")
-        .unwrap_or(&"show".to_string())
-        .as_str()
-    {
-        "clear" => {
-            reset_context(context);
-            return Ok(Some(" Cleared context\n".to_string()));
-        }
-        "show" | "" => (),
-        command => {
+    match args.subcommand() {
+        Some(("add", sub_args)) => ctx_add_callback(sub_args, context),
+        Some(("rem", sub_args)) => ctx_rem_callback(sub_args, context),
+        Some(("clear", _)) => ctx_clear_callback(context),
+        _ => ctx_show_callback(context),
+    }
+}
+
+fn ctx_clear_callback(context: &mut ReplContext) -> Result<Option<String>> {
+    reset_context(context);
+    Ok(Some(" Cleared context\n".to_string()))
+}
+
+fn ctx_add_callback(args: &ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
+    let mut property_str = concat_args(args.get_many("property").unwrap());
+    property_str.push_str(";");
+    let property = match parser::property_p::<ApsParserKind>(&property_str) {
+        Ok(("", p)) => p,
+        Ok((r, _)) => {
             return Ok(Some(format!(
-                " Unknown ctx command: {} ('show' or 'clear')",
-                command
+                " Failed to parse everything as a property: \"{}\"",
+                r
+            )))
+        }
+        Err(_) => {
+            return Ok(Some(format!(
+                " Failed to parse \"{}\" as a property",
+                property_str
             )))
         }
     };
+    match context.properties.insert(property.clone()) {
+        true => Ok(Some(format!(" Added {} to the properties", property))),
+        false => Ok(Some(format!(" Property {} was already defined", property))),
+    }
+}
+
+fn ctx_rem_callback(args: &ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
+    let mut property_str = concat_args(args.get_many("property").unwrap());
+    property_str.push_str(";");
+    let property = match parser::property_p::<ApsParserKind>(&property_str) {
+        Ok(("", p)) => p,
+        Ok((r, _)) => {
+            return Ok(Some(format!(
+                " Failed to parse everything as a property: \"{}\"",
+                r
+            )))
+        }
+        Err(_) => {
+            return Ok(Some(format!(
+                " Failed to parse \"{}\" as a property",
+                property_str
+            )))
+        }
+    };
+    match context.properties.remove(&property) {
+        true => Ok(Some(format!(" Removed {} from the properties", property))),
+        false => Ok(Some(format!(
+            " Could not find {} in the properties",
+            property
+        ))),
+    }
+}
+
+fn ctx_show_callback(context: &mut ReplContext) -> Result<Option<String>> {
     let mut content = String::new();
     if context.properties.is_empty() {
         content.push_str(" No Properties\n");
@@ -205,17 +272,13 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
         "auto-break" => handle_setting!(context.auto_break, action_name, param_name),
         "expr-pretty-print" => handle_setting!(context.pretty_print_steps, action_name, param_name),
         "route-poc" => handle_setting!(context.route_poc, action_name, param_name),
-        _ => {
-            return Ok(Some(
-                " usage: settings (auto-break/expr-pretty-print) (on/off/show)".to_string(),
-            ))
-        }
+        _ => return Err(UnknownCommand(param_name.to_string())),
     }
 }
 
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     let body_str = concat_args(args.get_many("body").unwrap());
-    let objects = split_algebraic_objects(match parser::root::<parser::ApsParserKind>(&body_str) {
+    let objects = split_algebraic_objects(match parser::root::<ApsParserKind>(&body_str) {
         Ok(("", objects)) => objects,
         Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
         Err(err) => return Ok(Some(format!(" Error occurred while parsing :\n{}", err))),
@@ -268,7 +331,7 @@ fn prove_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
 
 pub fn solve_equality_str(property_str: String, context: &mut ReplContext) -> Option<String> {
     // parse the expression
-    let property = match parser::property_p::<parser::ApsParserKind>(&property_str) {
+    let property = match parser::property_p::<ApsParserKind>(&property_str) {
         Ok((_, property)) => property,
         Err(err) => {
             eprint!(" Error in parsing property: {}", err);
@@ -368,7 +431,7 @@ pub fn import_into_context(context: &mut ReplContext, filename: &str) -> bool {
     };
     let content_box = Box::new(content);
     // parse input context
-    let alg_objects = match parser::root::<parser::ApsParserKind>(&content_box) {
+    let alg_objects = match parser::root::<ApsParserKind>(&content_box) {
         Ok(("", algebraic_objects)) => algebraic_objects,
         Ok((rest, algebraic_objects)) => panic!(
             " Failed to parse everything:\nParsed (root) :\n{:#?}\n'{}'\n",
@@ -418,7 +481,7 @@ fn concat_args(args: ValuesRef<String>) -> String {
 }
 
 pub fn str2atom(input: &str) -> Atom {
-    match parser::toplevel_atom_p::<parser::ApsParserKind>(input) {
+    match parser::toplevel_atom_p::<ApsParserKind>(input) {
         Ok(("", expr)) => expr,
         Ok((rest, parsed)) => panic!(
             " Failed to parse entirety of atom:\nRest: <<{}>>\nParsed (expr) :\n{:#?}\n",

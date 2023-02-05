@@ -3,6 +3,7 @@
 #use examples/plus.apsl
 #use examples/mul.apsl
 #use examples/power.apsl
+#use examples/distr.apsl
 
 K :: R ;
 

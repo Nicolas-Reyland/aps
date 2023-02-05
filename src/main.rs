@@ -8,7 +8,10 @@ fn main() {
     // set max number of threads per exploration
     unsafe {
         MAX_NUM_THREADS_PER_EXPLORATION = num_cpus::get() * 2;
-        println!("num threads per exploration (max): {}", MAX_NUM_THREADS_PER_EXPLORATION);
+        println!(
+            "num threads per exploration (max): {}",
+            MAX_NUM_THREADS_PER_EXPLORATION
+        );
     }
     // collect cmd args
     let args: Vec<String> = env::args().collect();

@@ -2,7 +2,8 @@
     // Null element
     A ^ 0 = 1 ;
     // Sequential definition
-    A ^ N = # * : N : A # ;
+    // A ^ N = # * : N : A # ;
+    A ^ 2 = A * A ;
 }
 
 _ :: {
