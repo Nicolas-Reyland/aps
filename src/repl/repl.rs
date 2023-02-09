@@ -19,6 +19,7 @@ use reedline_repl_rs::{
     Repl, Result,
 };
 use std::collections::{HashMap, HashSet};
+use crate::preprocessor::{process_macros, remove_comments};
 
 static TAB_WIDTH: usize = 8;
 
@@ -278,7 +279,8 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
 
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     let body_str = concat_args(args.get_many("body").unwrap());
-    let objects = split_algebraic_objects(match parser::root::<ApsParserKind>(&body_str) {
+    let preprocessed_body_srt = process_macros(remove_comments(body_str.as_str()).as_str(), None);
+    let objects = split_algebraic_objects(match parser::root::<ApsParserKind>(&preprocessed_body_srt) {
         Ok(("", objects)) => objects,
         Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
         Err(err) => return Ok(Some(format!(" Error occurred while parsing :\n{}", err))),
@@ -476,8 +478,9 @@ fn concat_args(args: ValuesRef<String>) -> String {
     let mut property_str = String::new();
     for value in args {
         property_str.push_str(value);
+        property_str.push(' ');
     }
-    property_str
+    property_str.trim().to_string()
 }
 
 pub fn str2atom(input: &str) -> Atom {

@@ -1,3 +1,9 @@
+
+// Could do this :
+// #add * commutative, associative
+// #identitiy * 1
+// #null * 0
+
 * lr :: {
     // Commutativity
     A * B = B * A ;
