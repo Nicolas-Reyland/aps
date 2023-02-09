@@ -43,12 +43,9 @@ pub fn exec_macro_use(macro_str: &str, imports: Option<Vec<&str>>) -> String {
 pub fn exec_macro_add(macro_str: &str) -> String {
     // #add + associative,commutative
     let mut content = String::new();
-    let op_str = macro_str[5..6].to_string();
-    let op_string = parser::op_p::<parser::ApsParserKind>(&op_str)
-        .expect(&format!("Failed to parse operator: <{}> in <{}>", op_str, macro_str))
-        .1.op.to_string();
+    let (op_string, rest) = extract_operator_rest(macro_str, 5);
     let op_str = op_string.as_str();
-    let attr_str = macro_str[7..].to_string().replace("\\s", "");
+    let attr_str = rest.to_string().replace("\\s", "");
     for attr in attr_str.split(",") {
         match attr {
             "a" | "ass" | "associative" => {
@@ -62,4 +59,27 @@ pub fn exec_macro_add(macro_str: &str) -> String {
     }
 
     content
+}
+
+pub fn exec_macro_identity(macro_str: &str) -> String {
+    // #identity + 0
+    // #identity * 1
+    let (op_string, value_str) = extract_operator_rest(macro_str, 10);
+    let value = value_str.parse::<i32>().expect(format!("Failed to parse <{}> as a number", value_str).as_str());
+    format!("_ :: {{ A {} {} = A ; }}\n", op_string, value)
+}
+
+pub fn exec_macro_null(macro_str: &str) -> String {
+    // #null * 0
+    let (op_string, value_str) = extract_operator_rest(macro_str, 6);
+    let value = value_str.parse::<i32>().expect(format!("Failed to parse <{}> as a number", value_str).as_str());
+    format!("_ :: {{ A {} {} = {} ; }}\n", op_string, value, value)
+}
+
+fn extract_operator_rest(content: &str, op_index: usize) -> (String, String) {
+    let op_str = content[op_index..op_index+1].to_string();
+    let op_string = parser::op_p::<parser::ApsParserKind>(&op_str)
+        .expect(&format!("Failed to parse operator: <{}> in <{}>", op_str, content))
+        .1.op.to_string();
+    (op_string, content[op_index + 2..].to_string())
 }

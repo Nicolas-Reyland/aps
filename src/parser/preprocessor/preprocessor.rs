@@ -145,11 +145,17 @@ pub fn process_macros(src: &str, imports: Option<Vec<&str>>) -> String {
 }
 
 fn expand_macro(macro_str: &str, imports: Option<Vec<&str>>) -> String {
-    if macro_str.starts_with("#use ") {
+    if macro_str.starts_with("#use") {
         return macros::exec_macro_use(macro_str, imports);
     }
-    if macro_str.starts_with("#add ") {
+    if macro_str.starts_with("#add") {
         return macros::exec_macro_add(macro_str);
+    }
+    if macro_str.starts_with("#identity") {
+        return macros::exec_macro_identity(macro_str);
+    }
+    if macro_str.starts_with("#null") {
+        return macros::exec_macro_null(macro_str);
     }
     panic!("Unknown macro instruction: '{}'", macro_str);
 }
