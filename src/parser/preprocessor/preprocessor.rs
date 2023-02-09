@@ -2,6 +2,8 @@
 
 use std::fs;
 
+mod macros;
+
 pub fn read_and_preprocess_file(filename: &str, imports: Option<Vec<&str>>) -> Option<String> {
     let mut content = match fs::read_to_string(filename) {
         Ok(s) => s,
@@ -144,41 +146,10 @@ pub fn process_macros(src: &str, imports: Option<Vec<&str>>) -> String {
 
 fn expand_macro(macro_str: &str, imports: Option<Vec<&str>>) -> String {
     if macro_str.starts_with("#use ") {
-        let mut content = String::new();
-        let filenames_str = macro_str[4..].to_string();
-        let filenames: Vec<&str> = filenames_str.split(' ').collect();
-        for filename in filenames {
-            if filename.is_empty() {
-                continue;
-            }
-            // test for import-cycle
-            if imports.is_some() && imports.as_ref().unwrap().contains(&filename) {
-                panic!(
-                    "Import cycle detected for {} : {:?}",
-                    filename,
-                    imports.unwrap()
-                )
-            }
-            match read_and_preprocess_file(
-                filename,
-                match imports.clone() {
-                    Some(mut imports) => {
-                        imports.push(&filename);
-                        Some(imports)
-                    }
-                    None => Some(vec![&filename]),
-                },
-            ) {
-                Some(s) => content.push_str(&s),
-                None => {
-                    eprintln!(" import for '{}' was unsuccessful (#use)", filename);
-                    continue;
-                }
-            }
-            // to separate file contents (which might not even end with a new-line char)
-            content.push('\n');
-        }
-        return content;
+        return macros::exec_macro_use(macro_str, imports);
+    }
+    if macro_str.starts_with("#add ") {
+        return macros::exec_macro_add(macro_str);
     }
     panic!("Unknown macro instruction: '{}'", macro_str);
 }

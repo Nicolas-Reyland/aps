@@ -6,7 +6,7 @@ pub mod explorer;
 pub mod generate;
 #[path = "parser/parser.rs"]
 pub mod parser;
-#[path = "parser/preprocessor.rs"]
+#[path = "parser/preprocessor/preprocessor.rs"]
 pub mod preprocessor;
 #[path = "repl/repl.rs"]
 pub mod repl;
