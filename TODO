@@ -6,5 +6,3 @@ Todo List :
   and would be translated to "(2 * A) + 3" if '*' happened to have a higher
   priority than '+'
 - repl: ability to re-print last proof (after settings expr-pretty-print <action>)
-- parser: add a way to add common attributes to operators, such as associativity,
-  commutativity, the identity element, etc (as macros)
