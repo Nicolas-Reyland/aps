@@ -1,0 +1,26 @@
+#add + associative,commutative
+#add * associative,commutative
+
+> r :: {
+    P > Q = not(P) + Q ;
+    0 > A = 1 ;
+    1 > 0 = 0 ;
+    1 > 1 = 1 ;
+}
+
++ lr :: {
+    P + 1 = 1 ;
+    0 + 0 = 0 ;
+    A + not(A) = 1 ;
+}
+
+* lr :: {
+    P * 0 = 0 ;
+    1 * 1 = 1 ;
+    A * not(A) = 0 ;
+}
+
+_ :: {
+    not(0) = 1 ;
+    not(1) = 0 ;
+}
