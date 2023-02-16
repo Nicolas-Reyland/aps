@@ -288,9 +288,9 @@ fn sp_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str,
     take_while(move |c| chars.contains(c))(input)
 }
 
-/// op : [+-*/@^$%] sp
+/// op : [+-*/@^$%><.] sp
 pub fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Operator, E> {
-    map(sp_terminated!(one_of("+-*/@^$%")), |op| Operator { op })(input)
+    map(sp_terminated!(one_of("+-*/@^$%><.")), |op| Operator { op })(input)
 }
 
 /// fn_name : [a-z_][a-z0-9_] sp

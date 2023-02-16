@@ -233,7 +233,7 @@ fn print_node_dot_format(node: &GraphNode) -> String {
     if node.index != 0 || node.transform != None {
         content.push_str(&format!(
             "\t{} -> {} [label=< <B> {} </B> > fontsize=7 fontcolor=darkgreen];\n",
-            node.parent,
+            node.parent, // TODO: replace '>' and '<' with '&lt;' and '&gt;'
             node.index,
             match &node.transform {
                 Some(x) => x.to_string(),
