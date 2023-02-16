@@ -6,3 +6,4 @@ Todo List :
   and would be translated to "(2 * A) + 3" if '*' happened to have a higher
   priority than '+'
 - repl: ability to re-print last proof (after settings expr-pretty-print <action>)
+- graph .dot: handle < and > operators (&lt; and &gt;)
