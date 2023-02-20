@@ -212,7 +212,7 @@ pub fn print_graph_dot_format(graph: &AtomGraph) -> String {
     let mut content = String::new();
     content.push_str("/* DOT FORMAT START */\n");
     // start printing the graph
-    content.push_str("digraph G {{\n\trankdir = LR;\n\tedge [minlen=3.5];\n");
+    content.push_str("digraph G {{\n\trankdir = LR;\n\tedge [overlap=false minlen=3.5];\n");
     for node in &graph.nodes {
         content.push_str(&print_node_dot_format(node));
     }
