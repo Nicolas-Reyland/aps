@@ -1,5 +1,5 @@
 # aps-lang
-**Algebraic Proof System Language**
+**Algebraic Proof System**
 
 A language written in rust to generate proofs of algebraic statements, based on algebraic structures.
 
