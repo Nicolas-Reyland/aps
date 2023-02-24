@@ -7,8 +7,8 @@ A system written in rust to generate proofs of algebraic statements, based on al
 
 Clone and cd into the repo :
 ```sh
-git clone https://github.com/Nicolas-Reyland/apsl-lang.git
-cd apsl-lang
+git clone https://github.com/Nicolas-Reyland/aps.git
+cd aps
 ```
 
 Install rust and cargo :
