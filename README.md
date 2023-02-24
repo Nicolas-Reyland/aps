@@ -1,4 +1,4 @@
-# apsl-lang
+# aps-lang
 **Algebraic Proof System Language**
 
 A language written in rust to generate proofs of algebraic statements, based on algebraic structures.
