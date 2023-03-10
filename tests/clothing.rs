@@ -1,8 +1,8 @@
 #[cfg(test)]
-use apsl_lang::clothing::*;
-use apsl_lang::parser::OperatorAssociativity::*;
-use apsl_lang::parser::*;
-use apsl_lang::repl::str2atom;
+use aps::clothing::*;
+use aps::parser::OperatorAssociativity::*;
+use aps::parser::*;
+use aps::repl::str2atom;
 use std::collections::HashMap;
 
 fn default_associativities() -> AssociativityHashMap {

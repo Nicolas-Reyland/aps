@@ -1,7 +1,7 @@
 /* Parser for Algebraic Proofing System Language */
 
-use apsl_lang::repl::{import_into_context, init_context, repl};
-use apsl_lang::threads::MAX_NUM_THREADS_PER_EXPLORATION;
+use aps::repl::{import_into_context, init_context, repl};
+use aps::threads::MAX_NUM_THREADS_PER_EXPLORATION;
 use std::env;
 
 fn main() {

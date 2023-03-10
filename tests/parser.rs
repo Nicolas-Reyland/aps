@@ -1,5 +1,5 @@
-use apsl_lang::parser::OperatorAssociativity::NonAssociative;
-use apsl_lang::parser::*;
+use aps::parser::OperatorAssociativity::NonAssociative;
+use aps::parser::*;
 
 #[test]
 fn atom_symbol() {

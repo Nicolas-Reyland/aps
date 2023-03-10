@@ -1,7 +1,7 @@
 // Tests for preprocessor
 
 #[cfg(test)]
-use apsl_lang::preprocessor::remove_comments;
+use aps::preprocessor::remove_comments;
 
 #[test]
 fn test_remove_comments() {

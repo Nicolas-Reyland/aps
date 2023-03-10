@@ -1,9 +1,9 @@
-use apsl_lang::explorer::Atom2AtomHashMap;
+use aps::explorer::Atom2AtomHashMap;
 #[cfg(test)]
-use apsl_lang::generate::*;
-use apsl_lang::parser::AssociativityHashMap;
-use apsl_lang::parser::OperatorAssociativity::*;
-use apsl_lang::repl::str2atom;
+use aps::generate::*;
+use aps::parser::AssociativityHashMap;
+use aps::parser::OperatorAssociativity::*;
+use aps::repl::str2atom;
 use std::collections::HashMap;
 
 fn default_associativities() -> AssociativityHashMap {

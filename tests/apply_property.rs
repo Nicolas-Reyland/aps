@@ -1,6 +1,6 @@
-use apsl_lang::parser::OperatorAssociativity::*;
+use aps::parser::OperatorAssociativity::*;
 #[cfg(test)]
-use apsl_lang::{explorer::*, parser::*, repl::*};
+use aps::{explorer::*, parser::*, repl::*};
 use std::collections::{HashMap, HashSet};
 
 fn default_associativities() -> AssociativityHashMap {
