@@ -293,7 +293,7 @@ pub fn op_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Oper
     map(sp_terminated!(one_of("+-*/@^$%><.")), |op| Operator { op })(input)
 }
 
-/// fn_name : [a-z_][a-z0-9_] sp
+/// fn_name : [a-z_][a-z0-9_]* sp
 fn fn_name_p<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, &'i str, E> {
     sp_terminated!(recognize(tuple((
         satisfy(|c| c == '_' || c.is_lowercase()),
