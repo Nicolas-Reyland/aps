@@ -1,6 +1,7 @@
 // APS Repl
 
 use crate::parser::ApsParserKind;
+use crate::preprocessor::{process_macros, remove_comments};
 use crate::{
     clothing::strip_expr_naked,
     explorer::{explore_graph, init_graph, print_graph_dot_format},
@@ -13,13 +14,15 @@ use crate::{
     solution::solve_equality,
 };
 use divrem::DivCeil;
+use reedline_repl_rs::Error;
 use reedline_repl_rs::Error::UnknownCommand;
 use reedline_repl_rs::{
     clap::{parser::ValuesRef, Arg, ArgMatches, Command},
     Repl, Result,
 };
 use std::collections::{HashMap, HashSet};
-use crate::preprocessor::{process_macros, remove_comments};
+use std::fs::File;
+use std::io::Write;
 
 static TAB_WIDTH: usize = 8;
 
@@ -280,11 +283,13 @@ fn settings_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Opti
 fn rule_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {
     let body_str = concat_args(args.get_many("body").unwrap());
     let preprocessed_body_srt = process_macros(remove_comments(body_str.as_str()).as_str(), None);
-    let objects = split_algebraic_objects(match parser::root::<ApsParserKind>(&preprocessed_body_srt) {
-        Ok(("", objects)) => objects,
-        Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
-        Err(err) => return Ok(Some(format!(" Error occurred while parsing :\n{}", err))),
-    });
+    let objects = split_algebraic_objects(
+        match parser::root::<ApsParserKind>(&preprocessed_body_srt) {
+            Ok(("", objects)) => objects,
+            Ok((rest, _)) => return Ok(Some(format!(" Error: Could not parse '{}'", rest))),
+            Err(err) => return Ok(Some(format!(" Error occurred while parsing :\n{}", err))),
+        },
+    );
     // extend context
     extend_context(objects, context);
     Ok(Some(" Added object(s) to context.".to_owned()))
@@ -301,11 +306,25 @@ fn graph_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<
         .unwrap()
         .parse::<u8>()?;
     for _ in 0..depth {
-        if !explore_graph(&mut graph, &context.properties, &context.associativities) {
-            break;
+        match explore_graph(&mut graph, &context.properties, &context.associativities) {
+            Ok(true) => (),
+            Ok(false) => break,
+            Err(err) => {
+                return Ok(Some(format!(" Graph exploration failed: {:?}", err)));
+            }
         }
     }
-    Ok(Some(print_graph_dot_format(&graph)))
+
+    // Write graph string to file and stdout
+    let graph_str = print_graph_dot_format(&graph);
+
+    // Write to file — fallback to a generic REPL error if it fails
+    let mut file = File::create("/tmp/aps-exploration-graph.dot")
+        .map_err(|_| Error::IllegalRequiredError("Failed to create output file".into()))?;
+    writeln!(file, "{}", graph_str)
+        .map_err(|_| Error::IllegalRequiredError("Failed to write graph to file".into()))?;
+
+    Ok(Some(graph_str))
 }
 
 fn import_callback(args: ArgMatches, context: &mut ReplContext) -> Result<Option<String>> {

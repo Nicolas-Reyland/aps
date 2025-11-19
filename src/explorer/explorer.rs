@@ -9,13 +9,17 @@ use std::{
 
 use crate::clothing::strip_expr_naked;
 use crate::generate::generate_atom;
-use crate::parser::{parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom, AtomExpr, FunctionCallExpr, SequentialExpr, format_toplevel_atom};
+use crate::parser::{
+    format_toplevel_atom, parenthesized_atom, AlgebraicProperty, AssociativityHashMap, Atom,
+    AtomExpr, FunctionCallExpr, SequentialExpr,
+};
 use crate::threads::*;
+use std::sync::mpsc::RecvTimeoutError;
 
 macro_rules! escape_html {
     ($x:expr) => {
         $x.to_string().replace(">", "&gt;").replace("<", "&lt;")
-    }
+    };
 }
 
 #[derive(Debug, Clone)]
@@ -110,7 +114,7 @@ pub fn explore_graph(
     graph: &mut AtomGraph,
     properties: &HashSet<AlgebraicProperty>,
     associativities: &AssociativityHashMap,
-) -> bool {
+) -> Result<bool, RecvTimeoutError> {
     // apply every property to all the outer-layer nodes of the graph
     let mut new_nodes: Vec<(GraphNode, GraphNode)> = Vec::new();
     // currently running threads
@@ -126,34 +130,30 @@ pub fn explore_graph(
     {
         for property in get_relevant_properties(&node, properties) {
             // wait until we can start a new thread
-            early_collections += wait_for_next_thread(&receiver, graph, &mut new_nodes, &handles);
+            early_collections += wait_for_next_thread(&receiver, graph, &mut new_nodes, &handles)?;
             // remove_deprecated_handles!(receiver, graph, new_nodes, handles, deprecated_handles);
-            let mut num_threads = handles.len();
-            handles = handles
-                .into_iter()
-                .filter_map(|handle| {
-                    if handle.is_finished() {
-                        num_threads -= 1;
-                        handle
-                            .join()
-                            .unwrap()
-                            .expect(&format!("Could not join handle"));
-                        if early_collections != 0 {
-                            early_collections -= 1;
-                        } else {
-                            collect_once(&receiver, &graph, &mut new_nodes);
-                        }
-                        None
+            let mut next_handles: Vec<ExplorationHandle> = Vec::new();
+            for handle in handles.into_iter() {
+                if handle.is_finished() {
+                    handle
+                        .join()
+                        .unwrap()
+                        .expect(&format!("Could not join handle"));
+                    if early_collections != 0 {
+                        early_collections -= 1;
                     } else {
-                        Some(handle)
+                        collect_once(&receiver, &graph, &mut new_nodes)?;
                     }
-                })
-                .collect();
+                } else {
+                    next_handles.push(handle);
+                }
+            }
+            handles = next_handles;
             // start a new thread, for this property matching
             explore_property(&sender, node, property, associativities, &mut handles);
         }
     }
-    collect_all_remaining_threads(&receiver, early_collections, graph, &mut new_nodes, handles);
+    collect_all_remaining_threads(&receiver, early_collections, graph, &mut new_nodes, handles)?;
     // add new nodes, etc
     let mut at_least_one_new_node = false;
     let mut new_node_index = graph.nodes.len();
@@ -174,7 +174,7 @@ pub fn explore_graph(
         graph.max_depth += 1;
     }
     // has the graph at least one new node ?
-    at_least_one_new_node
+    Ok(at_least_one_new_node)
 }
 
 /// Skip the rounds that would simply 'go back' one iteration.

@@ -7,7 +7,7 @@ use crate::{
 };
 use std::{
     collections::HashSet,
-    sync::mpsc::{Receiver, SendError, Sender},
+    sync::mpsc::{Receiver, RecvTimeoutError, SendError, Sender},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -25,7 +25,7 @@ pub fn wait_for_next_thread(
     graph: &AtomGraph,
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
     handles: &Vec<ExplorationHandle>,
-) -> i32 {
+) -> Result<i32, RecvTimeoutError> {
     let num_current_threads = handles.len();
     let wait_once: bool;
     unsafe {
@@ -33,10 +33,10 @@ pub fn wait_for_next_thread(
     };
     if wait_once {
         // wait for one thread to finish
-        collect_once(receiver, graph, new_nodes);
-        1
+        collect_once(receiver, graph, new_nodes)?;
+        Ok(1)
     } else {
-        0
+        Ok(0)
     }
 }
 
@@ -73,7 +73,7 @@ pub fn collect_all_remaining_threads(
     graph: &AtomGraph,
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
     handles: Vec<ExplorationHandle>,
-) {
+) -> Result<(), RecvTimeoutError> {
     // join all the handles
     for handle in handles {
         handle
@@ -83,9 +83,10 @@ pub fn collect_all_remaining_threads(
         if early_collections != 0 {
             early_collections -= 1;
         } else {
-            collect_once(receiver, graph, new_nodes)
+            collect_once(receiver, graph, new_nodes)?
         };
     }
+    Ok(())
 }
 
 /// Collect one result through the 'receiver'. Prune it. Add it to the new_nodes.
@@ -93,29 +94,34 @@ pub fn collect_once(
     receiver: &Receiver<ExplorationResult>,
     graph: &AtomGraph,
     new_nodes: &mut Vec<(GraphNode, GraphNode)>,
-) {
-    let (property, node_index, mut new_atoms) =
-        receiver.recv_timeout(Duration::from_millis(1000)).unwrap();
-    // filter out the generated atoms that are already in the graph
-    new_atoms = new_atoms
-        .into_iter()
-        .filter(|new_atom| {
-            !graph_contains_atom(graph, new_atom) && !new_nodes_contain_atom(new_nodes, new_atom)
-        })
-        .collect();
-    // source node
-    let node = &graph.nodes[node_index];
-    // add all new nodes to graph
-    new_nodes.extend(new_atoms.into_iter().map(|new_atom| {
-        (
-            node.clone(),
-            GraphNode {
-                atom: new_atom,
-                parent: 0,
-                transform: Some(property.clone()),
-                depth: 0,
-                index: 0,
-            },
-        )
-    }));
+) -> Result<(), RecvTimeoutError> {
+    loop {
+        match receiver.recv_timeout(Duration::from_millis(1000)) {
+            Ok((property, node_index, mut new_atoms)) => {
+                new_atoms = new_atoms
+                    .into_iter()
+                    .filter(|new_atom| {
+                        !graph_contains_atom(graph, new_atom)
+                            && !new_nodes_contain_atom(new_nodes, new_atom)
+                    })
+                    .collect();
+                let node = &graph.nodes[node_index];
+                new_nodes.extend(new_atoms.into_iter().map(|new_atom| {
+                    (
+                        node.clone(),
+                        GraphNode {
+                            atom: new_atom,
+                            parent: 0,
+                            transform: Some(property.clone()),
+                            depth: 0,
+                            index: 0,
+                        },
+                    )
+                }));
+                break Ok(());
+            }
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Disconnected) => break Err(RecvTimeoutError::Disconnected),
+        }
+    }
 }

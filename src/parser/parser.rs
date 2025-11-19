@@ -117,7 +117,7 @@ impl fmt::Display for OperatorAssociativity {
     }
 }
 
-#[derive(Debug, Clone, Hash, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct AtomExpr {
     pub atoms: Vec<Atom>,
     // There is only one operator : A + B * C is actually A + (B * C)
@@ -125,32 +125,22 @@ pub struct AtomExpr {
     pub operator: Option<Operator>,
 }
 
-impl PartialEq for AtomExpr {
-    fn eq(&self, other: &Self) -> bool {
-        let num_atoms = self.atoms.len();
-        if num_atoms != other.atoms.len() || self.operator != other.operator {
-            return false;
-        }
-        for i in 0..num_atoms - 1 {
-            if self.atoms[i] != other.atoms[i] {
-                return false;
-            }
-        }
-        self.atoms[num_atoms - 1] == other.atoms[num_atoms - 1]
-    }
-}
-
 impl fmt::Display for AtomExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.atoms[0])?;
-        let operator_char = match &self.operator {
-            Some(operator) => operator.op,
-            None => '?',
-        };
-        for atom in self.atoms.iter().skip(1) {
-            write!(f, " {} {}", operator_char, atom)?;
+        match self.atoms.split_first() {
+            Some((first, rest)) => {
+                write!(f, "{}", first)?;
+                let operator_char = match &self.operator {
+                    Some(operator) => operator.op,
+                    None => '?',
+                };
+                for atom in rest {
+                    write!(f, " {} {}", operator_char, atom)?;
+                }
+                Ok(())
+            }
+            None => write!(f, "()"),
         }
-        Ok(())
     }
 }
 
@@ -557,30 +547,29 @@ pub fn toplevel_atom_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
 pub fn atom_expr_p<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     input: &'i str,
 ) -> IResult<&'i str, AtomExpr, E> {
-    context(
-        "simple atom expr",
-        map(
-            tuple((atom_p, many0(tuple((op_p, atom_p))))),
-            |(first_atom, rest)| {
-                let mut atoms: Vec<Atom> = vec![first_atom];
-                let mut operator: Option<Operator> = None;
-                // stick everything together
-                for (op, atom) in rest.clone() {
-                    atoms.push(atom);
-                    // Check for an operator update or operator error
-                    if operator == None {
-                        operator = Some(op);
-                    } else if operator != Some(op.clone()) {
-                        panic!(
-                            "Two types of operators in the same AtomExpr {:?} and {:?} in {:?}",
-                            operator, op, rest
-                        );
-                    }
-                }
-                AtomExpr { atoms, operator }
-            },
-        ),
-    )(input)
+    context("simple atom expr", |input| {
+        let (input, (first_atom, rest)) = tuple((atom_p, many0(tuple((op_p, atom_p)))))(input)?;
+        let mut atoms: Vec<Atom> = vec![first_atom];
+        let mut operator: Option<Operator> = None;
+        for (op, atom) in rest {
+            atoms.push(atom);
+            if operator.is_none() {
+                operator = Some(op);
+            } else if operator.as_ref() != Some(&op) {
+                return Err(nom::Err::Failure(E::from_error_kind(
+                    input,
+                    ErrorKind::Verify,
+                )));
+            }
+        }
+        if atoms.len() > 1 && operator.is_none() {
+            return Err(nom::Err::Failure(E::from_error_kind(
+                input,
+                ErrorKind::Verify,
+            )));
+        }
+        Ok((input, AtomExpr { atoms, operator }))
+    })(input)
 }
 
 /// property_list : (property sp)*
@@ -672,7 +661,11 @@ pub fn split_algebraic_objects(
                 }
             }
             AlgebraicObject::Function(f) => {
-                functions.insert(f);
+                if f.arg_atoms.iter().all(|arg| matches!(arg, Atom::Symbol(_))) {
+                    functions.insert(f);
+                } else {
+                    eprintln!(" Skipping function '{}' with non-symbol arguments", f.name);
+                }
                 ()
             }
         };

@@ -157,3 +157,18 @@ fn fn_call() {
         ))
     )
 }
+
+#[test]
+fn atom_expr_rejects_mixed_operators() {
+    assert!(atom_expr_p::<ApsParserKind>("A + B * C ").is_err());
+}
+
+#[test]
+fn atom_expr_display_handles_empty() {
+    let expr = AtomExpr {
+        atoms: Vec::new(),
+        operator: None,
+    };
+    assert_eq!(format!("{}", expr), "()");
+    assert_eq!(expr, expr.clone());
+}

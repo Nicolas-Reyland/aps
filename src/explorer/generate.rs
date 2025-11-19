@@ -84,7 +84,7 @@ fn generate_sequential(
                 associativities,
             )
         }
-        // this includes the case where the enumerator is '0'
+        // Non-numeric enumerator: leave as-is (non-expandable) to avoid generating invalid sequences
         _ => Atom::Sequential(Box::new(SequentialExpr {
             operator: seq.operator.clone(),
             enumerator: mapped_enumerator,

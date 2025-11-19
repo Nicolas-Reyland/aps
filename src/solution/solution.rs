@@ -13,6 +13,7 @@ use crate::{
     parser::{AlgebraicProperty, AssociativityHashMap, Atom, KProperty},
     MAX_GRAPH_EXPLORATION_DEPTH, MAX_NODES_PER_GRAPH,
 };
+use std::sync::mpsc::RecvTimeoutError;
 
 pub fn solve_equality(
     properties: HashSet<AlgebraicProperty>,
@@ -52,8 +53,22 @@ pub fn solve_equality(
         // explore the graphs once each
         let left_handle = start_graph_exploration(&properties, &left_mutex, associativities);
         let right_handle = start_graph_exploration(&properties, &right_mutex, associativities);
-        let left_has_evolved = left_handle.join().unwrap();
-        let right_has_evolved = right_handle.join().unwrap();
+        let left_has_evolved = match left_handle.join() {
+            Ok(Ok(v)) => v,
+            Ok(Err(e)) => {
+                eprintln!("Graph exploration failed (left): {:?}", e);
+                break;
+            }
+            Err(_) => break,
+        };
+        let right_has_evolved = match right_handle.join() {
+            Ok(Ok(v)) => v,
+            Ok(Err(e)) => {
+                eprintln!("Graph exploration failed (right): {:?}", e);
+                break;
+            }
+            Err(_) => break,
+        };
 
         if !left_has_evolved && !right_has_evolved {
             // one graph can evolve alone, and maybe 'join' the other
@@ -107,7 +122,7 @@ fn start_graph_exploration(
     properties: &HashSet<AlgebraicProperty>,
     left_mutex: &Arc<Mutex<AtomGraph>>,
     associativities: &AssociativityHashMap,
-) -> JoinHandle<bool> {
+) -> JoinHandle<Result<bool, RecvTimeoutError>> {
     // clone things
     let scoped_left_mutex_clone = Arc::clone(&left_mutex);
     let properties_clone = properties.clone();
